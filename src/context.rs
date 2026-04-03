@@ -8,6 +8,7 @@ use futures_util::SinkExt;
 
 use crate::{ChatMessage, AppState};
 
+
 pub async fn handle_websocket (socket: WebSocket, state: Arc<AppState>) {
     println!("New connection");
 
@@ -28,7 +29,7 @@ pub async fn handle_websocket (socket: WebSocket, state: Arc<AppState>) {
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             if let Ok(chat_msg) = serde_json::from_str::<ChatMessage>(msg.to_text().unwrap_or("")) {
-                println!("📨 Получено: {}: {}", chat_msg.username, chat_msg.text);
+                println!("Received: {}: {}", chat_msg.username, chat_msg.text);
                 let _ = tx.send(chat_msg);
             }
         }

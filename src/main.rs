@@ -11,11 +11,24 @@ use std::sync::Arc;
 mod context;
 mod structs;
 
+pub(crate) mod mail;
+
 use structs::*;
 use context::*;
+use mail::send_mail_verif_code;
 
 async fn health_handler() -> &'static str {
     "OK"
+}
+
+async fn send_code() -> &'static str {
+    match send_mail_verif_code("nastya.rakitskaya@bk.ru", "10").await {
+        Ok(_) => "OK",
+        Err(e) => {
+            eprintln!("Failed to send email: {}", e);
+            "ERROR"
+        }
+    }
 }
 
 #[tokio::main]
@@ -29,6 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .route("/chat", get(websocket_handler))
         .route("/health", get(health_handler))
+        .route("/code", get(send_code))
         .with_state(state);
     
     let listner = TcpListener::bind(args[1].as_str()).await
