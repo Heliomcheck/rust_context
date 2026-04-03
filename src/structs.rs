@@ -1,5 +1,7 @@
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -27,9 +29,26 @@ pub struct Event {
 
 pub struct User {
     pub username: Option<String>,
+    pub email: String,
+    pub password_hash: String,
     pub id: u64,
-    pub fullname: String,
-    pub event_ids: Option<Vec<u64>>
+    pub name: String,
+    pub event_ids: Option<Vec<u64>>,
+    pub verif_code: String
+}
+
+pub struct UserStore { // In-memory user store
+    pub users: HashMap<u64, User>,           // id → User
+    pub users_by_email: HashMap<String, u64>, // email → id
+    pub users_by_username: HashMap<String, u64>, // username → id
+    pub sessions: HashMap<String, UserSession>, // token → session
+    pub next_id: u64,
+}
+
+pub struct UserSession {
+    pub user_id: u64,
+    pub token: String,
+    pub expires_at: DateTime<Utc>
 }
 
 pub struct AppState {

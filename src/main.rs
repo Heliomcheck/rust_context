@@ -12,6 +12,7 @@ mod context;
 mod structs;
 
 pub(crate) mod mail;
+pub(crate) mod user;
 
 use structs::*;
 use context::*;
@@ -21,7 +22,7 @@ async fn health_handler() -> &'static str {
     "OK"
 }
 
-async fn send_code() -> &'static str {
+async fn send_code_handler() -> &'static str {
     match send_mail_verif_code("nastya.rakitskaya@bk.ru", "10").await {
         Ok(_) => "OK",
         Err(e) => {
@@ -29,6 +30,11 @@ async fn send_code() -> &'static str {
             "ERROR"
         }
     }
+}
+
+async fn sign_in_up_handler() -> &'static str {
+
+    "OK"
 }
 
 #[tokio::main]
@@ -42,7 +48,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .route("/chat", get(websocket_handler))
         .route("/health", get(health_handler))
-        .route("/code", get(send_code))
+        .route("/code", get(send_code_handler))
+        .route("/login", get(sign_in_up_handler))
         .with_state(state);
     
     let listner = TcpListener::bind(args[1].as_str()).await
