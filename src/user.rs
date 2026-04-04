@@ -1,5 +1,8 @@
 use crate::user;
-
+use crate::structs::{UserStore, UserSession, User};
+use std::collections::HashMap;
+use chrono::{DateTime, Utc, Duration};
+use anyhow::Result;
 
 impl UserStore {
     pub fn new() -> Self {
@@ -24,11 +27,11 @@ impl UserStore {
         self.next_id += 1;
 
         let user = User {
-            username: Some(name.clone()),
+            username: user_id.to_string(),
             email: email.clone(),
             password_hash,
             id: user_id,
-            name,
+            name: name.clone(),
             event_ids: None,
             verif_code: String::new()
         };
@@ -53,7 +56,7 @@ impl UserStore {
     }
 
     pub fn create_session(&mut self, user_id: u64) -> Result<String, anyhow::Error> {
-        let token = uuid::Uuid::new_v4().to_string();
+        let token = uuid::Builder::nil().into_uuid().to_string(); //refacktor to generate random token
         let expires_at = Utc::now() + Duration::hours(24);
 
         let session = UserSession {
@@ -70,12 +73,12 @@ impl UserStore {
         self.sessions.get(token)
     }
 
-    pub fn del_user(&mut self, user_id: u64) -> Result<(), anyhow::Error> {
+    pub fn del_user(&mut self, user_id: u64) -> Result<(), anyhow::Error> { //refacktor to delete all data
         if let Some(user) = self.users.remove(&user_id) {
-            if let Some(email) = user.email.clone() {
+            if let email = user.email.clone() {
                 self.users_by_email.remove(&email);
             }
-            if let Some(username) = user.username.clone() {
+            if let username = user.username.clone() {
                 self.users_by_username.remove(&username);
             }
             Ok(())
@@ -86,11 +89,11 @@ impl UserStore {
 }
 
 
-async fn sign_in(name: String, email: String, password: String) -> Result<(), anyhow::Error> {
-    let user = User {
-        name: name.to_string(),
-        email: email.to_string(),
-        password_hash: password.to_string(),
-    };
-    Ok(())
-}
+// async fn sign_in(name: String, email: String, password: String) -> Result<(), anyhow::Error> {
+//     let user = User {
+//         name: name.to_string(),
+//         email: email.to_string(),
+//         password_hash: password.to_string(),
+//     };
+//     Ok(())
+// }

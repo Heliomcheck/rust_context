@@ -28,7 +28,7 @@ pub struct Event {
 }
 
 pub struct User {
-    pub username: Option<String>,
+    pub username: String,
     pub email: String,
     pub password_hash: String,
     pub id: u64,
