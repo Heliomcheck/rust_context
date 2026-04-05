@@ -26,7 +26,7 @@ pub struct Event {
     pub event_id: u64,
     pub chat: ChatMessage
 }
-
+#[derive(Debug)]
 pub struct User {
     pub username: String,
     pub email: String,

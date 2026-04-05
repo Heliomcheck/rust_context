@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::{Utc, Duration};
 use anyhow::{Context, Result};
 use std::convert::Into;
+use std::marker::Copy;
 
 impl UserStore {
     pub fn new() -> Self {
@@ -17,7 +18,7 @@ impl UserStore {
 
     pub fn add_user(
             &mut self, 
-            username: impl Into<Option<String>>, 
+            mut username: Option<String>, 
             email: String, 
             password_hash: String,
             birthday: impl Into<Option<String>>, //
@@ -27,15 +28,14 @@ impl UserStore {
         if self.users_by_email.contains_key(&email) {
             return Err(anyhow::anyhow!("Email already exists"));
         }
-        // if self.users_by_username.contains_key(&name) {
-        //     return Err(anyhow::anyhow!("Username already exists"));
-        // }
 
         let user_id = self.next_id;
         self.next_id += 1;
 
+        let final_username = username.unwrap_or_else(|| user_id.to_string());
+
         let user = User {
-            username: username.into().unwrap_or(user_id.to_string()), // Generate username if not provided
+            username: final_username.clone(),
             email: email.clone(),
             password_hash,
             birthday: birthday.into().unwrap_or_default(), // Set default birthday if not provided
@@ -49,7 +49,7 @@ impl UserStore {
 
         self.users.insert(user_id, user);
         self.users_by_email.insert(email, user_id);
-        self.users_by_username.insert(name, user_id);
+        self.users_by_username.insert(final_username, user_id);
 
         Ok(user_id)
     }
@@ -98,4 +98,56 @@ impl UserStore {
         }
         Ok(())
     }
-} 
+}
+    // Tests 
+
+    #[test]
+    fn test_add_user() {
+        let mut store = UserStore::new();
+        let user_id = store.add_user(
+            Some("test".to_string()), 
+            "test@example.com".to_string(), 
+            "password_hash".to_string(), 
+            None, 
+            "Test User".to_string());
+        assert!(user_id.is_ok());
+    }
+
+    #[test]
+    fn test_get_user_by_email() {
+        let mut store = UserStore::new();
+        let user_id = store.add_user(
+            Some("test".to_string()), 
+            "test@example.com".to_string(), 
+            "password_hash".to_string(), 
+            None, 
+            "Test User".to_string());
+        let user = store.get_user_by_email("test@example.com");
+        assert!(user.is_some());
+    }
+
+    #[test]
+    fn test_get_user_by_id() {
+        let mut store = UserStore::new();
+        let user_id = store.add_user(
+            Some("test".to_string()), 
+            "test@example.com".to_string(), 
+            "password_hash".to_string(), 
+            None, 
+            "Test User".to_string());
+        let user = store.get_user_by_id(user_id.unwrap());
+        assert!(user.is_some());
+    }
+
+    #[test]
+    fn test_get_user_by_username() {
+        let mut store = UserStore::new();
+        let user_id = store.add_user(
+            Some("test".to_string()), 
+            "test@example.com".to_string(), 
+            "password_hash".to_string(), 
+            None, 
+            "Test User".to_string());
+        let user = store.get_user_by_username("test");
+        assert!(user.is_some());
+    }
