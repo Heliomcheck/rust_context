@@ -7,7 +7,7 @@ use std::env;
 use anyhow::Context;
 use lettre::transport::smtp::client::Tls;
 
-pub async fn send_mail_verif_code(to_mail: &str, code: &str) -> Result<(), anyhow::Error>{
+pub async fn send_mail_verif_code(to_mail: &str) -> Result<(), anyhow::Error>{
     dotenv().ok();
 
     let username = env::var("SMTP_USERNAME").context("Username is not valid")?;
@@ -21,6 +21,7 @@ pub async fn send_mail_verif_code(to_mail: &str, code: &str) -> Result<(), anyho
     let username_format = username.parse::<Mailbox>().context("Error 'from' (mail)")?;
     let to_mail_format = to_mail.parse::<Mailbox>().context("Error 'to_mail' (mail)")?;
 
+    let code = crate::generator::Generator::verification_code();
     let email = MessageBuilder::new()
         .from(username_format)
         .to(to_mail_format)

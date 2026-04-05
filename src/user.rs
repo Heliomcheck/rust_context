@@ -1,8 +1,8 @@
-use crate::user;
 use crate::structs::{UserStore, UserSession, User};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
-use anyhow::Result;
+use chrono::{Utc, Duration};
+use anyhow::{Context, Result};
+use std::convert::Into;
 
 impl UserStore {
     pub fn new() -> Self {
@@ -11,29 +11,40 @@ impl UserStore {
             users_by_email: HashMap::new(),
             users_by_username: HashMap::new(),
             sessions: HashMap::new(),
-            next_id: 1,
+            next_id: 1, //Connect to database and get the last id (in future)
         }
     }
 
-    pub fn add_user(&mut self, name: String, email: String, password_hash: String) -> Result<u64, anyhow::Error> {
+    pub fn add_user(
+            &mut self, 
+            username: impl Into<Option<String>>, 
+            email: String, 
+            password_hash: String,
+            birthday: impl Into<Option<String>>, //
+            name: String
+        ) -> Result<u64, anyhow::Error> {
+
         if self.users_by_email.contains_key(&email) {
             return Err(anyhow::anyhow!("Email already exists"));
         }
-        if self.users_by_username.contains_key(&name) {
-            return Err(anyhow::anyhow!("Username already exists"));
-        }
+        // if self.users_by_username.contains_key(&name) {
+        //     return Err(anyhow::anyhow!("Username already exists"));
+        // }
 
         let user_id = self.next_id;
         self.next_id += 1;
 
         let user = User {
-            username: user_id.to_string(),
+            username: username.into().unwrap_or(user_id.to_string()), // Generate username if not provided
             email: email.clone(),
             password_hash,
+            birthday: birthday.into().unwrap_or_default(), // Set default birthday if not provided
             id: user_id,
             name: name.clone(),
             event_ids: None,
-            verif_code: String::new()
+            verif_code: Option::<String>::None,
+            is_deleted: false,
+            is_online: false
         };
 
         self.users.insert(user_id, user);
@@ -56,7 +67,7 @@ impl UserStore {
     }
 
     pub fn create_session(&mut self, user_id: u64) -> Result<String, anyhow::Error> {
-        let token = uuid::Builder::nil().into_uuid().to_string(); //refacktor to generate random token
+        let token = crate::generator::Generator::session_token();
         let expires_at = Utc::now() + Duration::hours(24);
 
         let session = UserSession {
@@ -73,27 +84,18 @@ impl UserStore {
         self.sessions.get(token)
     }
 
-    pub fn del_user(&mut self, user_id: u64) -> Result<(), anyhow::Error> { //refacktor to delete all data
+    pub fn delete_sesseon(&mut self, token: &str) -> Result<(), anyhow::Error> { // delete session in memory
+        let session = self.sessions.remove(token).context("Session not found")?;
+    
+        let user_id = session.user_id;
+    
         if let Some(user) = self.users.remove(&user_id) {
-            if let email = user.email.clone() {
-                self.users_by_email.remove(&email);
+            self.users_by_email.remove(&user.email);
+            self.users_by_username.remove(&user.username);
+            if let Some(user) = self.users.get_mut(&user_id) {
+                user.is_online = false;
             }
-            if let username = user.username.clone() {
-                self.users_by_username.remove(&username);
-            }
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("User not found"))
         }
+        Ok(())
     }
-}
-
-
-// async fn sign_in(name: String, email: String, password: String) -> Result<(), anyhow::Error> {
-//     let user = User {
-//         name: name.to_string(),
-//         email: email.to_string(),
-//         password_hash: password.to_string(),
-//     };
-//     Ok(())
-// }
+} 

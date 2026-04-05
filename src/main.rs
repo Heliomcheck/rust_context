@@ -1,10 +1,7 @@
 use tokio::{net::TcpListener, sync::broadcast};
-use tokio::io::AsyncReadExt;
 use anyhow::{Context, Result}; 
-use futures_util::{SinkExt, StreamExt};
-use axum::{extract::ws::{WebSocket, WebSocketUpgrade},
-        Router, routing::get, 
-        extract::Path, 
+use axum::{extract::ws::{WebSocketUpgrade},
+        Router, routing::get,
         response::IntoResponse};
 use std::sync::Arc;
 
@@ -13,6 +10,7 @@ mod structs;
 
 pub(crate) mod mail;
 pub(crate) mod user;
+pub(crate) mod generator;
 
 use structs::*;
 use context::*;
@@ -23,7 +21,7 @@ async fn health_handler() -> &'static str {
 }
 
 async fn send_code_handler() -> &'static str {
-    match send_mail_verif_code("nastya.rakitskaya@bk.ru", "10").await {
+    match send_mail_verif_code("heliom.check@gmail.com").await {
         Ok(_) => "OK",
         Err(e) => {
             eprintln!("Failed to send email: {}", e);

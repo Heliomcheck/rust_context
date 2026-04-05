@@ -1,7 +1,4 @@
-use axum::{extract::ws::{WebSocket, WebSocketUpgrade},
-        Router, routing::get, 
-        extract::Path, 
-        response::IntoResponse};
+use axum::{extract::ws::WebSocket};
 use std::sync::Arc;
 use futures_util::StreamExt;
 use futures_util::SinkExt;

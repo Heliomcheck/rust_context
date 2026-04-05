@@ -22,7 +22,7 @@ pub struct ChatMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub event_name: String,
-    pub data: String,
+    pub data: Option<String>,
     pub event_id: u64,
     pub chat: ChatMessage
 }
@@ -31,10 +31,13 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub password_hash: String,
+    pub birthday: String,
     pub id: u64,
     pub name: String,
     pub event_ids: Option<Vec<u64>>,
-    pub verif_code: String
+    pub verif_code: Option<String>,
+    pub is_deleted: bool,
+    pub is_online: bool
 }
 
 pub struct UserStore { // In-memory user store
