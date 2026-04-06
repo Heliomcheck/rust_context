@@ -45,7 +45,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Router::new()
         .route("/chat", get(websocket_handler))
-        .route("/health", get(health_handler))
+        .route("/health", get(health_handler)) // delete in future
         .route("/code", get(send_code_handler))
         .route("/login", get(sign_in_up_handler))
         .with_state(state);

@@ -4,13 +4,13 @@ use uuid::Uuid;
 pub struct Generator;
 
 impl Generator {
-    pub fn verification_code() -> String { // for email verification, password reset, etc.
+    pub fn verification_code() -> String {  // for email verification, password reset, etc.
         let mut rng = rand::rng();
         let code: u32 = rng.random_range(0..1_000_000);
         format!("{:06}", code)
     }
     
-    pub fn session_token() -> String { //for user sessions
+    pub fn new_session_token() -> String {  // for user sessions
         Uuid::new_v4().to_string()
     }
     

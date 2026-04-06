@@ -26,11 +26,11 @@ pub struct Event {
     pub event_id: u64,
     pub chat: ChatMessage
 }
-#[derive(Debug)]
+
 pub struct User {
     pub username: String,
     pub email: String,
-    pub password_hash: String,
+    pub password_hash: String, // delete
     pub birthday: String,
     pub id: u64,
     pub name: String,
@@ -51,6 +51,13 @@ pub struct UserStore { // In-memory user store
 pub struct UserSession {
     pub user_id: u64,
     pub token: String,
+    pub expires_at: DateTime<Utc>
+}
+
+pub struct VerificationCode {
+    pub code: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>
 }
 
