@@ -1,8 +1,16 @@
-use crate::structs::{UserStore, UserSession, User};
+use crate::structs::{UserSession, User};
 use std::collections::HashMap;
 use chrono::{Utc, Duration};
 use anyhow::{Context, Result};
 use std::convert::Into;
+
+pub struct UserStore { // In-memory user store
+    pub users: HashMap<u64, User>,           // id -> User
+    pub users_by_email: HashMap<String, u64>, // email -> id
+    pub users_by_username: HashMap<String, u64>, // username -> id
+    pub sessions: HashMap<String, UserSession>, // token -> session
+    pub next_id: u64,
+}
 
 impl UserStore {
     pub fn new() -> Self {
@@ -70,14 +78,18 @@ impl UserStore {
     }
 
     pub fn create_session(&mut self, user_id: u64, token: Option<&String>) -> Result<String, anyhow::Error> {
-        dotenvy::dotenv().ok();
-        let ttl_hours = std::env::var("TTL_VERIFICATION_CODE").context("Need TTL_VERIFICATION_CODE in .env")?.parse::<i64>().context("TTL_VERIFICATION_CODE must be a number")?;
+        dotenvy::dotenv().ok(); // Load .env file to get TTL_VERIFICATION_CODE
+        let ttl_hours = std::env::var("TTL_VERIFICATION_CODE")
+            .context("Need TTL_VERIFICATION_CODE in .env")?
+            .parse::<i64>().context("TTL_VERIFICATION_CODE must be a number")?;
+
         if let Some(tok) = token {
             let expires_at = Utc::now() + Duration::hours(ttl_hours);
             let session = UserSession {
                 user_id,
                 token: tok.clone(),
                 expires_at,
+                created_at: Utc::now()
             };
             self.sessions.insert(tok.clone(), session);
             Ok(tok.clone())
@@ -88,6 +100,7 @@ impl UserStore {
                 user_id,
                 token: token.clone(),
                 expires_at,
+                created_at: Utc::now()
             };
             self.sessions.insert(token.clone(), session);
             Ok(token)
@@ -98,7 +111,7 @@ impl UserStore {
         self.sessions.get(token)
     }
 
-    pub fn delete_sesseon(&mut self, token: &str) -> Result<(), anyhow::Error> {    // delete session in memory
+    pub fn delete_session(&mut self, token: &str) -> Result<(), anyhow::Error> {    // delete session in memory
         let session = self.sessions.remove(token).context("Session not found")?;
     
         let user_id = session.user_id;
@@ -111,6 +124,20 @@ impl UserStore {
             }
         }
         Ok(())
+    }
+
+    pub fn verif_email(&mut self, email: &str, code: &str) -> Result<(), anyhow::Error> {
+        let user = self.get_user_by_email(email).context("User not found")?;
+        if let Some(verif_code) = &user.verif_code {
+            if verif_code == code {
+                // Mark email as verified (this is just a placeholder, you can implement it as needed)
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("Invalid verification code"))
+            }
+        } else {
+            Err(anyhow::anyhow!("No verification code found for this user"))
+        }
     }
 }
 
@@ -204,6 +231,6 @@ fn test_delete_session() {
         None, 
         "Test User".to_string());
     let token = store.create_session(user_id.unwrap(), None);
-    let delete_result = store.delete_sesseon(&token.unwrap());
+    let delete_result = store.delete_session(&token.unwrap());
     assert!(delete_result.is_ok());
 }

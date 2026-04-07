@@ -40,23 +40,9 @@ pub struct User {
     pub is_online: bool
 }
 
-pub struct UserStore { // In-memory user store
-    pub users: HashMap<u64, User>,           // id → User
-    pub users_by_email: HashMap<String, u64>, // email → id
-    pub users_by_username: HashMap<String, u64>, // username → id
-    pub sessions: HashMap<String, UserSession>, // token → session
-    pub next_id: u64,
-}
-
 pub struct UserSession {
     pub user_id: u64,
     pub token: String,
-    pub expires_at: DateTime<Utc>
-}
-
-pub struct VerificationCode {
-    pub code: String,
-    pub email: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>
 }

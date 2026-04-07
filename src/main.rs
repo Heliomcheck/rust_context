@@ -11,6 +11,7 @@ mod structs;
 pub(crate) mod mail;
 pub(crate) mod user;
 pub(crate) mod generator;
+pub(crate) mod verification;
 
 use structs::*;
 use context::*;
