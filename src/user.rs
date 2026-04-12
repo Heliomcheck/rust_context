@@ -1,5 +1,5 @@
 use crate::structs::{UserSession, User};
-use std::collections::HashMap;
+use std::{collections::HashMap, ptr::null};
 use chrono::{Utc, Duration};
 use anyhow::{Context, Result};
 use std::convert::Into;
@@ -26,10 +26,10 @@ impl UserStore {
     pub fn add_user(
             &mut self, 
             username: String, 
-            email: String, 
-            password_hash: String,
-            birthday: impl Into<Option<String>>,
-            name: String
+            email: String,
+            birthday: Option<String>,
+            name: String,
+            avatar_url: Option<String>
         ) -> Result<u64, anyhow::Error> {
 
         if self.users_by_email.contains_key(&email) {
@@ -39,28 +39,23 @@ impl UserStore {
         let user_id = self.next_id;
         self.next_id += 1;
 
-        let final_username = if username.is_empty() {
-            user_id.to_string()
-        } else {
-            username
-        };
-
         let user = User {
-            username: final_username.clone(),
+            username: username.clone(),
             email: email.clone(),
-            password_hash,
-            birthday: birthday.into().unwrap_or_default(),      // Set default birthday if not provided
+            birthday: birthday.clone(),      // Set default birthday if not provided
             id: user_id,
             name: name.clone(),
-            event_ids: None,
-            verif_code: Option::<String>::None,
+            avatar_url: avatar_url.clone(),
+
             is_deleted: false,
-            is_online: true
+            is_online: true,
+            created_at: Utc::now(),
+            last_online_at: Utc::now()
         };
 
         self.users.insert(user_id, user);
         self.users_by_email.insert(email, user_id);
-        self.users_by_username.insert(final_username, user_id);
+        self.users_by_username.insert(username, user_id);
 
         Ok(user_id)
     }
@@ -126,19 +121,36 @@ impl UserStore {
         Ok(())
     }
 
-    pub fn verif_email(&mut self, email: &str, code: &str) -> Result<(), anyhow::Error> {
-        let user = self.get_user_by_email(email).context("User not found")?;
-        if let Some(verif_code) = &user.verif_code {
-            if verif_code == code {
-                // Mark email as verified (this is just a placeholder, you can implement it as needed)
-                Ok(())
-            } else {
-                Err(anyhow::anyhow!("Invalid verification code"))
-            }
-        } else {
-            Err(anyhow::anyhow!("No verification code found for this user"))
-        }
+    pub fn check_username(&self, username: &str) -> bool {
+        self.users_by_username.contains_key(username)
     }
+
+    // pub fn verif_email(&mut self, email: &str, code: &str) -> Result<(), anyhow::Error> {
+    //     let user = self.get_user_by_email(email).context("User not found")?;
+    //     if let Some(verif_code) = &user.verif_code {
+    //         if verif_code == code {
+    //             // Mark email as verified (this is just a placeholder, you can implement it as needed)
+    //             Ok(())
+    //         } else {
+    //             Err(anyhow::anyhow!("Invalid verification code"))
+    //         }
+    //     } else {
+    //         Err(anyhow::anyhow!("No verification code found for this user"))
+    //     }
+    // }
+
+    // async pub fn sign_up(
+    //     &mut self, 
+    //     email: String, 
+    //     name: String, 
+    //     birthday: Option<String>, 
+    //     username: Option<String>) 
+    //     -> Result<String, anyhow::Error> {
+
+    //     let user_id = self.add_user(username, email, birthday, name)?;
+    //     let token = self.create_session(user_id, None)?;
+    //     Ok(token)
+    // }
 }
 
 // Tests 
@@ -147,11 +159,12 @@ impl UserStore {
 fn test_add_user() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        "password_hash".to_string(), 
-        None, 
-        "Test User".to_string());
+        "test".to_string(),
+        "test@example.com".to_string(),
+        None,
+        "Test User".to_string(),
+        None
+    );
     assert!(user_id.is_ok());
 }
 
@@ -159,11 +172,12 @@ fn test_add_user() {
 fn test_get_user_by_email() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        "password_hash".to_string(), 
+        "test".to_string(),
+        "test@example.com".to_string(),
         None, 
-        "Test User".to_string());
+        "Test User".to_string(),
+        None
+    );
     let user = store.get_user_by_email("test@example.com");
     assert!(user.is_some());
 }
@@ -172,11 +186,12 @@ fn test_get_user_by_email() {
 fn test_get_user_by_id() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        "password_hash".to_string(), 
-        None, 
-        "Test User".to_string());
+        "test".to_string(),
+        "test@example.com".to_string(),
+        None,
+        "Test User".to_string(),
+        None
+    );
     let user = store.get_user_by_id(user_id.unwrap());
     assert!(user.is_some());
 }
@@ -187,9 +202,10 @@ fn test_get_user_by_username() {
     let user_id = store.add_user(
         "test".to_string(), 
         "test@example.com".to_string(), 
-        "password_hash".to_string(), 
         None, 
-        "Test User".to_string());
+        "Test User".to_string(),
+        None
+    );
     let user = store.get_user_by_username("test");
     assert!(user.is_some());
 }
@@ -198,11 +214,12 @@ fn test_get_user_by_username() {
 fn test_create_session() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        "password_hash".to_string(), 
-        None, 
-        "Test User".to_string());
+        "test".to_string(),
+        "test@example.com".to_string(),
+        None,
+        "Test User".to_string(),
+        None
+    );
     let token = store.create_session(user_id.unwrap(), None);
     assert!(token.is_ok());
 }
@@ -211,11 +228,12 @@ fn test_create_session() {
 fn test_get_session() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
+        "test".to_string(),
         "test@example.com".to_string(), 
-        "password_hash".to_string(), 
         None, 
-        "Test User".to_string());
+        "Test User".to_string(),
+        None
+    );
     let token = store.create_session(user_id.unwrap(), None);
     let session = store.get_session(&token.unwrap());
     assert!(session.is_some());
@@ -225,11 +243,12 @@ fn test_get_session() {
 fn test_delete_session() {
     let mut store = UserStore::new();
     let user_id = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        "password_hash".to_string(), 
-        None, 
-        "Test User".to_string());
+        "test".to_string(),
+        "test@example.com".to_string(),
+        None,
+        "Test User".to_string(),
+        None
+    );
     let token = store.create_session(user_id.unwrap(), None);
     let delete_result = store.delete_session(&token.unwrap());
     assert!(delete_result.is_ok());

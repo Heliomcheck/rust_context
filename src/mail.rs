@@ -3,11 +3,30 @@ use lettre::{
     transport::smtp::authentication::Credentials,};
 use anyhow::Result;
 use dotenvy::dotenv;
-use std::env;
+use std::{env, hash::Hash};
 use anyhow::Context;
 use lettre::transport::smtp::client::Tls;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-pub async fn send_mail_verif_code(to_mail: &str) -> Result<(), anyhow::Error>{
+
+pub struct VerificationCode {
+    pub codes: HashMap<String, u32>, // email -> code
+    pub created_at: HashMap<String, chrono::DateTime<chrono::Utc>>, // email -> created_at
+    pub expires_at: HashMap<String, chrono::DateTime<chrono::Utc>> // email -> expires_at
+}
+
+impl VerificationCode {
+    pub fn new() -> Self {
+        Self {
+            codes: HashMap::new(),
+            created_at: HashMap::new(),
+            expires_at: HashMap::new()
+        }
+    }
+}
+
+pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) -> Result<(), anyhow::Error>{
     dotenv().ok();
 
     let username = env::var("SMTP_USERNAME").context("Username is not valid")?;
@@ -35,10 +54,16 @@ pub async fn send_mail_verif_code(to_mail: &str) -> Result<(), anyhow::Error>{
         .port(port)
         .tls(Tls::None)
         .build();
+
+    let code_u32 = code.parse::<u32>().context("Code must be a number")?;
     
     match mailer.send(&email) {
-        Ok(_) => println!("Email sent successfully"),
-        Err(e) => println!("Could not send email: {e:?}")  
+        Ok(_) => {
+            state.verification_codes.lock().await.codes.insert(to_mail.to_string(), code_u32);
+            state.verification_codes.lock().await.created_at.insert(to_mail.to_string(), chrono::Utc::now());
+            state.verification_codes.lock().await.expires_at.insert(to_mail.to_string(), chrono::Utc::now() + chrono::Duration::minutes(15));
+            Ok(())
+        }
+        Err(e) => Err(anyhow::anyhow!("Could not send email: {e:?}"))
     }
-    Ok(())
 }
