@@ -154,6 +154,15 @@ impl UserStore {
 }
 
 // Tests 
+#[test]
+fn test_new(){
+    let store = UserStore::new();
+    assert!(store.users.is_empty());
+    assert!(store.users_by_email.is_empty());
+    assert!(store.users_by_username.is_empty());
+    assert!(store.sessions.is_empty());
+    assert_eq!(store.next_id, 1);
+}
 
 #[test]
 fn test_add_user() {
@@ -252,4 +261,97 @@ fn test_delete_session() {
     let token = store.create_session(user_id.unwrap(), None);
     let delete_result = store.delete_session(&token.unwrap());
     assert!(delete_result.is_ok());
+}
+#[test]
+fn test_check_username_taken() { //s imenem
+    let mut store = UserStore::new();
+    store.add_user(//With your feet in the air and your head on the ground
+        "test".to_string(),//Try this trick and spin it, yeah
+        "test@mail.ru".to_string(),//Your head will collapse
+        None,//But there's nothing in it
+        "Tets name".to_string(),//And you'll ask yourself
+        None,//Where is my mind?
+    ).unwrap();//Where is my mind?
+    let exists = store.check_username("test");//Where is my mind?
+    assert!(exists);
+}
+#[test]
+fn test_check_username_untaken() { //bez imeni
+    let store = UserStore::new();
+    let exists = store.check_username("newhui");
+    assert!(exists);
+}
+#[test]
+fn test_check_username_empty() { //pusto
+    let store = UserStore::new();
+    let exists = store.check_username("");
+    assert!(exists);
+}
+#[test]
+fn test_check_username_spaces() { //probelli ebanya rot
+    let mut store = UserStore::new();
+    store.add_user(
+        "test nmae".to_string(),
+        "test@mail.ru".to_string(),
+        None,
+        "Tets name".to_string(),
+        None,
+    ).unwrap();
+    let exists = store.check_username("test nmae");
+    assert!(exists);
+}
+#[test]
+fn test_check_username_register() { //register (T != t)
+    let mut store = UserStore::new();
+    store.add_user(
+        "testName".to_string(),
+        "test@mail.ru".to_string(),
+        None,
+        "Tets Name".to_string(),
+        None,
+    ).unwrap();
+    let exists = store.check_username("testname");
+    assert!(exists);
+}
+#[test]
+fn test_check_username_long() { //dlinno nemnozhko
+    let mut store = UserStore::new();
+    let long_username = "sigmaboy".repeat(1000);
+    store.add_user(
+        long_username.clone(),
+        "test@mail.ru".to_string(),
+        None,
+        "Tets name".to_string(),
+        None,
+    ).unwrap();
+    let exists = store.check_username(&long_username);
+    assert!(exists);
+}
+#[test]
+fn test_check_username_special_chars() { //special simvoll's
+    let mut store = UserStore::new();
+    let username = "sigmaboy_123!@#";
+    store.add_user(
+        username.to_string(),
+        "test@mail.ru".to_string(),
+        None,
+        "Tets name".to_string(),
+        None,
+    ).unwrap();
+    let exists = store.check_username("username");
+    assert!(exists);
+}
+#[test]
+fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
+    let mut store = UserStore::new();
+    let username = "Валерыч";
+    store.add_user(
+        username.to_string(),
+        "test@mail.ru".to_string(),
+        None,
+        "Tets name".to_string(),
+        None,
+    ).unwrap();
+    let exists = store.check_username("username");
+    assert!(exists);
 }
