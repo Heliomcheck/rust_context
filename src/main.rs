@@ -21,17 +21,15 @@ pub(crate) mod user;
 pub(crate) mod generator;
 pub(crate) mod verification;
 pub(crate) mod models;
+pub(crate) mod token;
 
 use structs::*;
 use context::*;
 use mail::send_mail_verif_code;
 
 use crate::{
-    models::RegisterRequest,
-    models::Verify_code, 
-    user::UserStore, 
-    models::validation_errors_to_response,
-    models::Token
+    models::{RegisterRequest, TokenVerifyRequest, VerifyCodeRequest, CodeRequest, validation_errors_to_response},
+    user::UserStore
 };
 
 async fn health_handler() -> &'static str {
@@ -91,7 +89,7 @@ async fn request_code_handler(
 
 async fn verify_code_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<Verify_code>
+    Json(payload): Json<VerifyCodeRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
@@ -109,12 +107,15 @@ async fn verify_code_handler(
 
 async fn token_validate_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<Token>
+    Json(payload): Json<TokenVerifyRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
-    (StatusCode::CREATED, Json(json!({"success": true})))
+    match state.user_store.lock().await.is_valid_token(&payload.token) {
+        true => (StatusCode::OK, Json(json!({"success": true}))),
+        false => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": format!("Token validation failed")})))
+    }
 }
 
 #[tokio::main]
@@ -131,16 +132,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/auth/request-code", routing::post(request_code_handler))
         .route("/auth/verify_code", routing::post(verify_code_handler))
         .route("/auth/register", routing::post(register_handler))
+        .route("/auth/token-validate", routing::post(token_validate_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         //.route("/login", routing::get(sign_up_handler))
         .with_state(state);
 
-    // POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "email is invalid"}
-    // POST /auth/verify-code {email: "test.example.com", code: "123456"} -> register {temp_token: "", is_new_user: true} or login {token: "", is_new_user: false} or {error: "code is invalid"}
-    // POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}, temp_token: ""} -> if data.valid -> {token: ""} else {error: "reason"}
-    // POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
+    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "email is invalid"}
+    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> register {temp_token: "", is_new_user: true} or login {token: "", is_new_user: false} or {error: "code is invalid"}
+    // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}, temp_token: ""} -> if data.valid -> {token: ""} else {error: "reason"}
+    // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
     // POST /auth/logout {} -> userstore.logout(token)
     // POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
     // POST /user/avatar 

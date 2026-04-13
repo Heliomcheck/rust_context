@@ -1,4 +1,4 @@
-use crate::structs::{UserSession, User};
+use crate::{structs::{User, UserSession}, token::TokenStore};
 use std::{collections::HashMap, ptr::null};
 use chrono::{Utc, Duration};
 use anyhow::{Context, Result};
@@ -79,26 +79,27 @@ impl UserStore {
             .parse::<i64>().context("TTL_VERIFICATION_CODE must be a number")?;
 
         if let Some(tok) = token {
-            let expires_at = Utc::now() + Duration::hours(ttl_hours);
             let session = UserSession {
                 user_id,
-                token: tok.clone(),
-                expires_at,
+                token: HashMap::from([(tok.clone(), TokenStore {
+                    token: tok.clone(),
+                    created_at: Utc::now(),
+                    expires_at: Utc::now() + Duration::hours(ttl_hours)
+                })]),
                 created_at: Utc::now()
             };
             self.sessions.insert(tok.clone(), session);
             Ok(tok.clone())
         } else {
-            let token = crate::generator::Generator::new_session_token();
-            let expires_at = Utc::now() + Duration::hours(ttl_hours);
+            let token = TokenStore::new(ttl_hours);
+            let token_str = token.token.clone();
             let session = UserSession {
                 user_id,
-                token: token.clone(),
-                expires_at,
+                token: HashMap::from([(token.token.clone(), token)]),
                 created_at: Utc::now()
             };
-            self.sessions.insert(token.clone(), session);
-            Ok(token)
+            self.sessions.insert(token_str.clone(), session);
+            Ok(token_str)
         }
     }
 
@@ -125,10 +126,18 @@ impl UserStore {
         self.users_by_username.contains_key(username)
     }
 
-    pub fn is_valid_token(&mut self, token: &str) {
-        // match self.sessions.get(token) {
-        //     Some()
-        // }
+    pub fn is_valid_token(&mut self, token: &str) -> bool {
+        match self.sessions.get(token) {
+            Some(session) => {
+                if session.token.get(token).unwrap().expires_at < Utc::now() {
+                    self.sessions.remove(token);
+                    false
+                } else {
+                    true
+                }
+            },
+            None => false
+        }
     }
 
     // pub fn verif_email(&mut self, email: &str, code: &str) -> Result<(), anyhow::Error> {
@@ -285,13 +294,13 @@ fn test_check_username_taken() { //s imenem
 fn test_check_username_untaken() { //bez imeni
     let store = UserStore::new();
     let exists = store.check_username("newhui");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_empty() { //pusto
     let store = UserStore::new();
     let exists = store.check_username("");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_spaces() { //probelli ebanya rot
@@ -317,7 +326,7 @@ fn test_check_username_register() { //register (T != t)
         None,
     ).unwrap();
     let exists = store.check_username("testname");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_long() { //dlinno nemnozhko
@@ -345,7 +354,7 @@ fn test_check_username_special_chars() { //special simvoll's
         None,
     ).unwrap();
     let exists = store.check_username("username");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
@@ -358,6 +367,6 @@ fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' t
         "Tets name".to_string(),
         None,
     ).unwrap();
-    let exists = store.check_username("username");
+    let exists = store.check_username("Валерыч");
     assert!(exists);
 }

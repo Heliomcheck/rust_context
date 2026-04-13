@@ -41,14 +41,14 @@ pub struct RegisterRequest {
 }
 
 #[derive(Deserialize, Serialize, Validate)]
-pub struct Request_code {
+pub struct CodeRequest {
     #[validate(email(
         message = "Email format invalid"))]
     pub email: String
 }
 
 #[derive(Deserialize, Serialize, Validate)]
-pub struct Verify_code {
+pub struct VerifyCodeRequest {
     #[validate(email(
         message = "Email format invalid"))]
     pub email: String,
@@ -58,7 +58,7 @@ pub struct Verify_code {
 }
 
 #[derive(Deserialize, Serialize, Validate)]
-pub struct Token {
+pub struct TokenVerifyRequest {
     #[validate(length(min = 32, max = 32))]
     pub token: String
 }

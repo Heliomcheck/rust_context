@@ -47,9 +47,8 @@ pub struct User {
 
 pub struct UserSession {
     pub user_id: u64,
-    pub token: String,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>
+    pub token: HashMap<String, crate::token::TokenStore>,
+    pub created_at: DateTime<Utc>
 }
 
 #[derive(Clone)]
