@@ -115,6 +115,7 @@ impl UserStore {
         if let Some(user) = self.users.remove(&user_id) {
             self.users_by_email.remove(&user.email);
             self.users_by_username.remove(&user.username);
+            self.sessions.remove(token);
             if let Some(user) = self.users.get_mut(&user_id) {
                 user.is_online = false;
             }
