@@ -125,6 +125,12 @@ impl UserStore {
         self.users_by_username.contains_key(username)
     }
 
+    pub fn is_valid_token(&mut self, token: &str) {
+        // match self.sessions.get(token) {
+        //     Some()
+        // }
+    }
+
     // pub fn verif_email(&mut self, email: &str, code: &str) -> Result<(), anyhow::Error> {
     //     let user = self.get_user_by_email(email).context("User not found")?;
     //     if let Some(verif_code) = &user.verif_code {

@@ -1,3 +1,4 @@
+use futures_util::future::ok;
 use tokio::{net::TcpListener, sync::broadcast};
 use anyhow::{Context, Result}; 
 use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoResponse, routing::{self, trace}
@@ -29,7 +30,8 @@ use crate::{
     models::RegisterRequest,
     models::Verify_code, 
     user::UserStore, 
-    models::validation_errors_to_response
+    models::validation_errors_to_response,
+    models::Token
 };
 
 async fn health_handler() -> &'static str {
@@ -38,7 +40,7 @@ async fn health_handler() -> &'static str {
 
 
 #[axum_macros::debug_handler]
-async fn sign_up_handler(
+async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>
 ) -> impl IntoResponse {
@@ -47,12 +49,10 @@ async fn sign_up_handler(
     }
     
     if state.user_store.lock().await.check_username(&payload.username.as_str()) {
-        eprintln!("Username is already taken");
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Username is already taken" })));
     }
 
     if Some(state.user_store.lock().await.get_user_by_email(&payload.email.as_str())).is_some() {
-        eprintln!("Email is already registered");
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
     }
     let mut user_store = state.user_store.lock().await;
@@ -63,15 +63,13 @@ async fn sign_up_handler(
         payload.name.clone(),
         payload.avatar_url.clone()
     ) {
-        Ok(user_id) => {
-            println!("User created with ID: {}", user_id);
+        Ok(_) => {
+            return (StatusCode::CREATED, Json(json!({"token" : ""})));
         }
         Err(e) => {
-            eprintln!("Failed to create user: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to create user" })));
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
         }
     }
-    (StatusCode::CREATED, Json(json!({ "status": "ok" })))
 }
 
 async fn request_code_handler(
@@ -87,7 +85,7 @@ async fn request_code_handler(
             (StatusCode::CREATED, Json(json!({"success": true}))),
         Err(e) => 
             (StatusCode::INTERNAL_SERVER_ERROR, 
-                Json(json!({"success": false, "error": "Failed to send verification code: {e}"})))
+                Json(json!({"success": false, "error": format!("Failed to send verification code: {e}")})))
     }
 }
 
@@ -99,23 +97,24 @@ async fn verify_code_handler(
         return validation_errors_to_response(errors);
     }
 
-    if state.verification_codes.lock().await.codes.contains_key(&payload.email) {
-        if state.verification_codes.lock().await.codes.get(&payload.email) == Some(&payload.code.parse::<u32>().unwrap_or(0)) {
-            // Code is valid, check if user exists
-            let user_exists = state.user_store.lock().await.get_user_by_email(&payload.email).is_some();
-            if user_exists {
-                // User exists, return login response
-                return (StatusCode::OK, Json(json!({ "token": "user_token", "is_new_user": false })));
-            } else {
-                // User does not exist, return registration response
-                return (StatusCode::OK, Json(json!({ "temp_token": "temp_token", "is_new_user": true })));
-            }
+    if state.verification_store.lock().await.verify(&payload.email, &payload.code) {
+        if let Some(_) = state.user_store.lock().await.get_user_by_email(&payload.email) {
+            return (StatusCode::OK, Json(json!({ "success" : true, "status": "verified", "is_new_user": false, "token" : "" })));
         } else {
-            // Code is invalid
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid verification code" })));
+            return (StatusCode::OK, Json(json!({ "success" : true, "status": "verified", "is_new_user": true, "temp_token" : ""  })));
         }
     }
-    (StatusCode::OK, Json(json!({ "status": "verified" })))
+    (StatusCode::BAD_GATEWAY, Json(json!({ "error": "Verification failed" })))
+}
+
+async fn token_validate_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Token>
+) -> impl IntoResponse {
+    if let Err(errors) = payload.validate() {
+        return validation_errors_to_response(errors);
+    }
+    (StatusCode::CREATED, Json(json!({"success": true})))
 }
 
 #[tokio::main]
@@ -124,17 +123,18 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
     let user_store = Arc::new(Mutex::new(UserStore::new()));
-    let verification_codes = Arc::new(Mutex::new(mail::VerificationCode ::new()));
+    let verification_store = Arc::new(Mutex::new(verification::VerificationStore::new()));
 
-    let state = Arc::new(AppState {tx, user_store, verification_codes});
+    let state = Arc::new(AppState {tx, user_store, verification_store});
 
     let app = Router::new()
         .route("/auth/request-code", routing::post(request_code_handler))
-        .route("/auth/register", routing::post(sign_up_handler))
+        .route("/auth/verify_code", routing::post(verify_code_handler))
+        .route("/auth/register", routing::post(register_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
-        .route("/login", routing::get(sign_up_handler))
+        //.route("/login", routing::get(sign_up_handler))
         .with_state(state);
 
     // POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "email is invalid"}

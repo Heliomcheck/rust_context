@@ -56,5 +56,5 @@ pub struct UserSession {
 pub struct AppState {
     pub tx: broadcast::Sender<ChatMessage>,
     pub user_store: Arc<Mutex<UserStore>>,
-    pub verification_codes: Arc<Mutex<crate::mail::VerificationCode>>
+    pub verification_store: Arc<Mutex<crate::verification::VerificationStore>>
 }

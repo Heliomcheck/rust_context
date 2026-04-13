@@ -1,3 +1,5 @@
+use std::string;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
@@ -53,4 +55,10 @@ pub struct Verify_code {
     #[validate(length(min = 6, max = 6, 
         message = "Code must be 6 digits"))]
     pub code: String
+}
+
+#[derive(Deserialize, Serialize, Validate)]
+pub struct Token {
+    #[validate(length(min = 32, max = 32))]
+    pub token: String
 }

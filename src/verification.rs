@@ -13,12 +13,11 @@ impl VerificationCode {
     pub const DEFAULT_TTL_MINUTES: i64 = 15;
 
     pub fn new(email: String, code: String, ttl_minutes: i64) -> Self { // Creating struct
-        let now = Utc::now();
         Self {
             code,
             email,
-            created_at: now,
-            expires_at: now + Duration::minutes(ttl_minutes)
+            created_at: Utc::now(),
+            expires_at: Utc::now() + Duration::minutes(ttl_minutes)
         }
     }
 
