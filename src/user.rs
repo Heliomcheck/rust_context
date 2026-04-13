@@ -279,13 +279,13 @@ fn test_check_username_taken() { //s imenem
 fn test_check_username_untaken() { //bez imeni
     let store = UserStore::new();
     let exists = store.check_username("newhui");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_empty() { //pusto
     let store = UserStore::new();
     let exists = store.check_username("");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_spaces() { //probelli ebanya rot
@@ -311,7 +311,7 @@ fn test_check_username_register() { //register (T != t)
         None,
     ).unwrap();
     let exists = store.check_username("testname");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_long() { //dlinno nemnozhko
@@ -339,7 +339,7 @@ fn test_check_username_special_chars() { //special simvoll's
         None,
     ).unwrap();
     let exists = store.check_username("username");
-    assert!(exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
@@ -353,5 +353,5 @@ fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' t
         None,
     ).unwrap();
     let exists = store.check_username("username");
-    assert!(exists);
+    assert!(!exists);
 }
