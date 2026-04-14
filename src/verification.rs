@@ -116,3 +116,123 @@ impl VerificationStore {
         count
     }
 }
+// Tests 
+#[test]//Никитос ты какойто калл написал кабуто 1000-7 вся фигня
+fn test_new(){
+    let store = VerificationStore::new();
+    assert!(store.get("test").is_none());
+}
+//Test VerificationCode
+#[test] //email created correct chek
+fn test_verification_code_new(){
+    let code = VerificationCode::new(
+        "test@mail.ru".to_string(),
+        "123456".to_string(),
+        15
+    );
+    assert_eq!(code.email, "test@mail.ru");
+    assert_eq!(code.code, "123456");
+    assert!(!code.is_expired());
+}
+#[test]//code created correct chek
+fn test_verification_code_generate(){
+    let code = VerificationCode::generate("test@mail.ru".to_string(), 15);
+    assert_eq!(code.email, "test@mail.ru");
+    assert_eq!(code.code.len(), 6);
+}
+#[test]//volidation code is correct
+fn test_verification_code_verify_success(){
+    let mut code = VerificationCode::new(
+        "test@mail.ru".to_string(),
+        "123456".to_string(),
+        15
+    );
+    let result = code.verify("123456");
+    assert!(result);
+}
+#[test]// if code is nepravilni
+fn test_verification_code_verify_fail_wrong_code() {
+    let mut code = VerificationCode::new(
+        "test@mail.ru".to_string(),
+        "123456".to_string(),
+        15
+    );
+
+    let result = code.verify("425267");
+    assert!(!result);
+}
+#[test]// code is prosrochen
+fn test_verification_code_expired() {
+    let mut code = VerificationCode::new(
+        "test@mail.ru".to_string(),
+        "123456".to_string(),
+        0 //no time
+    );
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    assert!(code.is_expired());
+    assert!(!code.verify("123456"));
+}
+#[test]//check code time
+fn test_verification_code_seconds() {
+    let code = VerificationCode::new(
+        "test@mail.ru".to_string(),
+        "123456".to_string(),
+        1
+    );
+    let remaining = code.remaining_seconds();
+    assert!(remaining >= 0);
+}
+
+//Test VerificationStore
+#[test]// check that code is saved and geteble
+fn test_store_create_and_get() {
+    let mut store = VerificationStore::new();
+
+    let code = store.create("test@mail.ru", 15);
+    let stored = store.get("test@mail.ru");
+
+    assert!(stored.is_some());
+    assert_eq!(stored.unwrap().code, code);
+}
+#[test]// check that code can be successed
+fn test_store_verify_success() {
+    let mut store = VerificationStore::new();
+
+    let code = store.create("test@mail.com", 15);
+    let result = store.verify("test@mail.com", &code);
+
+    assert!(result);
+}
+#[test]//check na durochka tipa verify code != unverefy code
+fn test_store_verify_fail() {
+    let mut store = VerificationStore::new();
+
+    store.create("test@mail.com", 15);
+    let result = store.verify("test@mail.com", "000000");
+
+    assert!(!result);
+}
+#[test]// deliting code check
+fn test_store_remove() {
+    let mut store = VerificationStore::new();
+
+    store.create("test@mail.com", 15);
+    let removed = store.remove("test@mail.com");
+
+    assert!(removed.is_some());
+    assert!(store.get("test@mail.com").is_none());
+}
+#[test]// chek that time outed code was remove
+fn test_cleanup_expired() {
+    let mut store = VerificationStore::new();
+
+    store.create("a@mail.com", 0);
+    store.create("b@mail.com", 0);
+
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    let removed = store.cleanup_expired();
+
+    assert_eq!(removed, 2);
+    assert!(store.get("a@mail.com").is_none());
+}
