@@ -357,6 +357,7 @@ fn test_check_username_special_chars() { //special simvoll's
     let exists = store.check_username("username");
     assert!(!exists);
 }
+
 #[test]
 fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
     let mut store = UserStore::new();
