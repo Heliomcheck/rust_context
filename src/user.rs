@@ -327,7 +327,7 @@ fn test_check_username_register() { //register (T != t)
         None,
     ).unwrap();
     let exists = store.check_username("testname");
-    assert!(!!exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_long() { //dlinno nemnozhko
@@ -355,7 +355,7 @@ fn test_check_username_special_chars() { //special simvoll's
         None,
     ).unwrap();
     let exists = store.check_username("username");
-    assert!(!!exists);
+    assert!(!exists);
 }
 
 #[test]

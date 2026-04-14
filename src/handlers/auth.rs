@@ -11,6 +11,9 @@ use axum::Json;
 use validator::{Validate, ValidationError};
 use axum::http::StatusCode;
 use serde_json::json;
+use axum::body::Body;
+use axum::http::Request;
+use tower::util::ServiceExt;
 
 use crate::structs::*;
 use crate::context::*;
@@ -18,7 +21,8 @@ use crate::mail::send_mail_verif_code;
 
 use crate::{
     models::{RegisterRequest, TokenVerifyRequest, VerifyCodeRequest, CodeRequest, validation_errors_to_response},
-    user::UserStore
+    user::UserStore,
+    verification::VerificationStore
 };
 
 pub async fn register_handler(
@@ -126,4 +130,38 @@ pub async fn username_check_handler(
     }
     let exists = state.user_store.lock().await.check_username(&payload.email.as_str());
     (StatusCode::OK, Json(json!({"available": !exists})))
+}
+//test
+#[tokio::test]//registretion check
+async fn test_register_handler() {
+    use tower::ServiceExt;
+
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+    });
+
+    let app = Router::new()
+        .route("/auth/register", routing::post(register_handler))
+        .with_state(state);
+
+    let payload = json!({
+        "username": "testuser",
+        "email": "test@mail.com",
+        "birthday": null,
+        "name": "Test",
+        "avatar_url": null
+    });
+
+    let request: Request<Body> = Request::builder()
+        .method("POST")
+        .uri("/auth/register")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), axum::http::StatusCode::CREATED);
 }

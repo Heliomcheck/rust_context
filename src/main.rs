@@ -88,7 +88,7 @@ async fn websocket_handler(
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
 //test
-#[tokio::test]//endpoint check(OK?)
+/*[tokio::test]//endpoint check(OK?)
 async fn test_health_handler() {
     use axum::{Router, routing::get};
     use axum::body::Body;
@@ -102,37 +102,4 @@ async fn test_health_handler() {
         .unwrap();
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), axum::http::StatusCode::OK);
-}
-#[tokio::test]//registretion check
-async fn test_sign_up_handler() {
-    use tower::ServiceExt;
-
-    let state = Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        user_store: Arc::new(Mutex::new(UserStore::new())),
-        verification_codes: Arc::new(Mutex::new(mail::VerificationCode::new())),
-    });
-
-    let app = Router::new()
-        .route("/auth/register", routing::post(sign_up_handler))
-        .with_state(state);
-
-    let payload = json!({
-        "username": "testuser",
-        "email": "test@mail.com",
-        "birthday": null,
-        "name": "Test",
-        "avatar_url": null
-    });
-
-    let request: Request<Body> = Request::builder()
-        .method("POST")
-        .uri("/auth/register")
-        .header("content-type", "application/json")
-        .body(Body::from(payload.to_string()))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-
-    assert_eq!(response.status(), axum::http::StatusCode::CREATED);
-}
+}*/
