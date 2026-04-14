@@ -59,12 +59,13 @@ async fn main() -> Result<(), anyhow::Error> {
         //.route("/login", routing::get(sign_up_handler))
         .with_state(state);
 
-    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "email is invalid"}
-    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> register {temp_token: "", is_new_user: true} or login {token: "", is_new_user: false} or {error: "code is invalid"}
+    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
+    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {temp_token: "", is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
     // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}, temp_token: ""} -> if data.valid -> {token: ""} else {error: "reason"}
     // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
-    // OK POST /auth/logout {} -> userstore.logout(token)
+    // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
+    
     // POST /user/avatar 
     // GET /avatars/{user_id}.(jpg, png, jpeg)
     
