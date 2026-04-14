@@ -59,12 +59,13 @@ async fn main() -> Result<(), anyhow::Error> {
         //.route("/login", routing::get(sign_up_handler))
         .with_state(state);
 
-    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "email is invalid"}
-    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> register {temp_token: "", is_new_user: true} or login {token: "", is_new_user: false} or {error: "code is invalid"}
+    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
+    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {temp_token: "", is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
     // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}, temp_token: ""} -> if data.valid -> {token: ""} else {error: "reason"}
     // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
-    // OK POST /auth/logout {} -> userstore.logout(token)
+    // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
+    
     // POST /user/avatar 
     // GET /avatars/{user_id}.(jpg, png, jpeg)
     
@@ -88,18 +89,51 @@ async fn websocket_handler(
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
 //test
-/*[tokio::test]//endpoint check(OK?)
-async fn test_health_handler() {
-    use axum::{Router, routing::get};
-    use axum::body::Body;
-    use axum::http::Request;
-    use tower::util::ServiceExt;
-    async fn health_handler() -> &'static str {"OK"}
-    let app = Router::new().route("/health", get(health_handler));
-    let request = Request::builder()
-        .uri("/health")
-        .body(Body::empty())
-        .unwrap();
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
-}*/
+// #[tokio::test]//endpoint check(OK?)
+// async fn test_health_handler() {
+//     use axum::{Router, routing::get};
+//     use axum::body::Body;
+//     use axum::http::Request;
+//     use tower::util::ServiceExt;
+//     async fn health_handler() -> &'static str {"OK"}
+//     let app = Router::new().route("/health", get(health_handler));
+//     let request = Request::builder()
+//         .uri("/health")
+//         .body(Body::empty())
+//         .unwrap();
+//     let response = app.oneshot(request).await.unwrap();
+//     assert_eq!(response.status(), axum::http::StatusCode::OK);
+// }
+// #[tokio::test]//registretion check
+// async fn test_sign_up_handler() {
+//     use tower::ServiceExt;
+
+//     let state = Arc::new(AppState {
+//         tx: broadcast::channel(10).0,
+//         user_store: Arc::new(Mutex::new(UserStore::new())),
+//         verification_codes: Arc::new(Mutex::new(mail::VerificationCode::new())),
+//     });
+
+//     let app = Router::new()
+//         .route("/auth/register", routing::post(sign_up_handler))
+//         .with_state(state);
+
+//     let payload = json!({
+//         "username": "testuser",
+//         "email": "test@mail.com",
+//         "birthday": null,
+//         "name": "Test",
+//         "avatar_url": null
+//     });
+
+//     let request: Request<Body> = Request::builder()
+//         .method("POST")
+//         .uri("/auth/register")
+//         .header("content-type", "application/json")
+//         .body(Body::from(payload.to_string()))
+//         .unwrap();
+
+//     let response = app.oneshot(request).await.unwrap();
+
+//     assert_eq!(response.status(), axum::http::StatusCode::CREATED);
+// }

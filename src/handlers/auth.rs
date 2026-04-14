@@ -84,9 +84,9 @@ pub async fn verify_code_handler(
 
     if state.verification_store.lock().await.verify(&payload.email, &payload.code) {
         if let Some(_) = state.user_store.lock().await.get_user_by_email(&payload.email) {
-            return (StatusCode::OK, Json(json!({ "success" : true, "status": "verified", "is_new_user": false, "token" : "" })));
+            return (StatusCode::OK, Json(json!({ "isNewUser": false, "token" : "" })));
         } else {
-            return (StatusCode::OK, Json(json!({ "success" : true, "status": "verified", "is_new_user": true, "temp_token" : ""  })));
+            return (StatusCode::OK, Json(json!({ "isNewUser": true, "tempToken" : ""  })));
         }
     }
     (StatusCode::BAD_GATEWAY, Json(json!({ "error": "Verification failed" })))
