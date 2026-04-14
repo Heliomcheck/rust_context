@@ -55,7 +55,7 @@ pub async fn register_handler(
 
 pub async fn request_code_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterRequest>
+    Json(payload): Json<CodeRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
@@ -64,9 +64,11 @@ pub async fn request_code_handler(
     match send_mail_verif_code(&payload.email, state).await {
         Ok(()) =>
             (StatusCode::CREATED, Json(json!({"success": true}))),
-        Err(e) => 
+        Err(e) => {
+            print!("{e}");
             (StatusCode::INTERNAL_SERVER_ERROR, 
                 Json(json!({"success": false, "error": format!("Failed to send verification code: {e}")})))
+            }
     }
 }
 

@@ -1,6 +1,9 @@
 use lettre::{
     SmtpTransport, Transport, message::{Mailbox, MessageBuilder},
-    transport::smtp::authentication::Credentials,};
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, AsyncTransport, Tokio1Executor
+};
+use lettre::transport::smtp::client::TlsParameters;
 use anyhow::Result;
 use dotenvy::dotenv;
 use std::env;
@@ -32,20 +35,24 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
         .subject("Your verification code")
         .body(format!("Verification code {}", code)).context("Code not found")?;
 
+    let tls_params = TlsParameters::new(server.clone())
+        .context("Failed to create TLS parameters")?;
+
     let creds = Credentials::new(username.to_owned(), password.to_owned());
 
-    let mailer = SmtpTransport::relay(&server)?
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&server)?
+        .port(port) 
         .credentials(creds)
-        .port(port)
-        .tls(Tls::None)
+        .tls(Tls::Required(tls_params))
         .build();
 
     let code_u32 = code.parse::<u32>().context("Code must be a number")?;
     
-    match mailer.send(&email) {
-        Ok(_) => {
-            Ok(())
+    match mailer.send(email).await {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            eprintln!("❌ Failed to send email to {}: {}", to_mail, e);
+            Err(anyhow::anyhow!("Could not send email: {e:?}"))
         }
-        Err(e) => Err(anyhow::anyhow!("Could not send email: {e:?}"))
     }
 }
