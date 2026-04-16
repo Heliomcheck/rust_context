@@ -12,8 +12,9 @@ use validator::{Validate, ValidationError};
 use axum::http::StatusCode;
 use serde_json::json;
 use std::collections::HashMap;
+use tower::ServiceExt;
 
-use crate::{structs::*, token::{self, TokenStore}};
+use crate::{models::CheckUsernameRequest, structs::*, token::{self, TokenStore}};
 use crate::context::*;
 use crate::mail::send_mail_verif_code;
 
@@ -126,14 +127,15 @@ pub async fn logout_handler(
 
 pub async fn username_check_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<CodeRequest>
+    Json(payload): Json<CheckUsernameRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
-    let exists = state.user_store.lock().await.check_username(&payload.email.as_str());
+    let exists = state.user_store.lock().await.check_username(&payload.username);
     (StatusCode::OK, Json(json!({"available": !exists})))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,25 +241,32 @@ mod tests {
     // USERNAME AVAILABLE
     #[tokio::test]
     async fn test_username_available() {
-        let app = app();
-
-        let payload = serde_json::json!({
-            "email": "freeusername"
+        let (tx, _) = broadcast::channel::<ChatMessage>(100);
+        let user_store = Arc::new(Mutex::new(UserStore::new()));
+        let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
+        
+        let state = Arc::new(AppState {
+            tx,
+            user_store,
+            verification_store,
         });
 
-        let res = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/auth/check_username")
-                    .header("content-type", "application/json")
-                    .body(Body::from(payload.to_string()))
-                    .unwrap(),
-            )
-            .await
+        let app = Router::new()
+            .route("/auth/check_username", post(username_check_handler))
+            .with_state(state);
+
+        let payload = json!({ "username": "freeusername" });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/auth/check_username")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
             .unwrap();
 
-        assert_eq!(res.status(), StatusCode::OK);
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     // TOKEN INVALID

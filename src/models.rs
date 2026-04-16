@@ -62,3 +62,9 @@ pub struct TokenVerifyRequest {
     #[validate(length(min = 32, max = 32))]
     pub token: String
 }
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CheckUsernameRequest {
+    #[validate(length(min = 3, message = "Username must be at least 3 characters"))]
+    pub username: String,
+}
