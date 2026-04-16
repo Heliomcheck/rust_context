@@ -3,6 +3,7 @@ use chrono::{Utc, DateTime};
 use crate::models::TokenVerifyRequest;
 use crate::generator::Generator;
 
+#[derive(Debug, Clone)]
 pub struct TokenStore {
     pub token: String,
     pub created_at: DateTime<Utc>,

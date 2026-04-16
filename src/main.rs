@@ -48,11 +48,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app = Router::new()
         .route("/auth/request-code", routing::post(request_code_handler))
-        .route("/auth/verify_code", routing::post(verify_code_handler))
+        .route("/auth/verify-code", routing::post(verify_code_handler))
         .route("/auth/register", routing::post(register_handler))
         .route("/auth/token-validate", routing::post(token_validate_handler))
         .route("/auth/logout", routing::post(logout_handler)) 
-        .route("/auth/check_username", routing::post(username_check_handler))
+        .route("/auth/check-username", routing::post(username_check_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future

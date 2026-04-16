@@ -2,7 +2,7 @@ use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
 use chrono::{DateTime, Utc};
-use std::{clone, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::user::UserStore;
 
@@ -42,13 +42,52 @@ pub struct User {
     pub is_deleted: bool,
     pub is_online: bool,
     pub created_at: DateTime<Utc>,
-    pub last_online_at: DateTime<Utc>
+    pub last_online_at: DateTime<Utc>,
+    pub tokens: Option<HashMap<String, crate::token::TokenStore>>
+}
+
+impl User { 
+    pub fn create(
+        user_id: u64,
+        username: String, 
+        email: String,
+        birthday: Option<String>,
+        name: String,
+        avatar_url: Option<String>,
+        tokens: Option<HashMap<String, crate::token::TokenStore>>
+    ) -> Self {
+        User {
+            username: username,
+            email: email,
+            birthday: birthday,      // Set default birthday if not provided
+            id: user_id,
+            name: name,
+            avatar_url: avatar_url,
+
+            is_deleted: false,
+            is_online: true,
+            created_at: Utc::now(),
+            last_online_at: Utc::now(),
+            tokens: tokens
+        }
+    }
+    
 }
 
 pub struct UserSession {
     pub user_id: u64,
-    pub token: HashMap<String, crate::token::TokenStore>,
+    pub token_store: String,
     pub created_at: DateTime<Utc>
+}
+
+impl UserSession {
+    pub fn create(user_id: u64, token: String,) -> Self  {
+        UserSession {
+            user_id,
+            token_store: token,
+            created_at: Utc::now()
+        }
+    }
 }
 
 #[derive(Clone)]

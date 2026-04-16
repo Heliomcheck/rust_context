@@ -15,7 +15,7 @@ use axum::body::Body;
 use axum::http::Request;
 use tower::util::ServiceExt;
 
-use crate::structs::*;
+use crate::{models::CheckUsernameRequest, structs::*, token::{self, TokenStore}};
 use crate::context::*;
 use crate::mail::send_mail_verif_code;
 
@@ -40,16 +40,20 @@ pub async fn register_handler(
     if Some(state.user_store.lock().await.get_user_by_email(&payload.email.as_str())).is_some() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
     }
+
+    let token = TokenStore::new(30);
+    let token_str = token.token.clone();
     let mut user_store = state.user_store.lock().await;
     match user_store.add_user(
         payload.username.clone(),
         payload.email.clone(),
         payload.birthday.clone(),
         payload.name.clone(),
-        payload.avatar_url.clone()
+        payload.avatar_url.clone(),
+        Some(HashMap::from([(token_str.clone(), token)]))
     ) {
         Ok(_) => {
-            return (StatusCode::CREATED, Json(json!({"token" : ""})));
+            return (StatusCode::CREATED, Json(json!({"token" : token_str})));
         }
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
@@ -59,7 +63,7 @@ pub async fn register_handler(
 
 pub async fn request_code_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterRequest>
+    Json(payload): Json<CodeRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
@@ -68,9 +72,11 @@ pub async fn request_code_handler(
     match send_mail_verif_code(&payload.email, state).await {
         Ok(()) =>
             (StatusCode::CREATED, Json(json!({"success": true}))),
-        Err(e) => 
+        Err(e) => {
+            print!("{e}");
             (StatusCode::INTERNAL_SERVER_ERROR, 
                 Json(json!({"success": false, "error": format!("Failed to send verification code: {e}")})))
+            }
     }
 }
 
@@ -123,12 +129,12 @@ pub async fn logout_handler(
 
 pub async fn username_check_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<CodeRequest>
+    Json(payload): Json<CheckUsernameRequest>
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
-    let exists = state.user_store.lock().await.check_username(&payload.email.as_str());
+    let exists = state.user_store.lock().await.check_username(&payload.username);
     (StatusCode::OK, Json(json!({"available": !exists})))
 }
 //test
