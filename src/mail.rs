@@ -51,7 +51,7 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
     match mailer.send(email).await {
         Ok(_) => Ok(()),
         Err(e) => {
-            eprintln!("❌ Failed to send email to {}: {}", to_mail, e);
+            eprintln!("Failed to send email to {}: {}", to_mail, e);
             Err(anyhow::anyhow!("Could not send email: {e:?}"))
         }
     }

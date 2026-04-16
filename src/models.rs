@@ -28,13 +28,13 @@ pub struct RegisterRequest {
     #[validate(email(
         message = "Email format invalid"))]
     pub email: String,
-    #[validate(length(min = 5, 
+    #[validate(length(min = 5, max = 30,
         message = "Username length must be more than 4 characters"))]
     pub username: String,
     #[validate(length(min = 10, max = 10, 
-        message = "Birthday format must be xx.xx.xxxx"))]
+        message = "Birthday format must be xx-xx-xxxx"))]
     pub birthday: Option<String>,
-    #[validate(length(min = 1, 
+    #[validate(length(min = 1, max = 100,
         message = "Name cannot be empty"))]
     pub name: String,
     pub avatar_url: Option<String>
