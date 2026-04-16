@@ -2,7 +2,7 @@ use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
 use chrono::{DateTime, Utc};
-use std::{clone, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::user::UserStore;
 
@@ -42,12 +42,13 @@ pub struct User {
     pub is_deleted: bool,
     pub is_online: bool,
     pub created_at: DateTime<Utc>,
-    pub last_online_at: DateTime<Utc>
+    pub last_online_at: DateTime<Utc>,
+    pub tokens: Option<HashMap<String, crate::token::TokenStore>>
 }
 
 pub struct UserSession {
     pub user_id: u64,
-    pub token: HashMap<String, crate::token::TokenStore>,
+    pub token_store: crate::token::TokenStore,
     pub created_at: DateTime<Utc>
 }
 

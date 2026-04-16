@@ -11,8 +11,9 @@ use axum::Json;
 use validator::{Validate, ValidationError};
 use axum::http::StatusCode;
 use serde_json::json;
+use std::collections::HashMap;
 
-use crate::structs::*;
+use crate::{structs::*, token::{self, TokenStore}};
 use crate::context::*;
 use crate::mail::send_mail_verif_code;
 
@@ -36,16 +37,20 @@ pub async fn register_handler(
     if Some(state.user_store.lock().await.get_user_by_email(&payload.email.as_str())).is_some() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
     }
+
+    let token = TokenStore::new(30);
+    let token_str = token.token.clone();
     let mut user_store = state.user_store.lock().await;
     match user_store.add_user(
         payload.username.clone(),
         payload.email.clone(),
         payload.birthday.clone(),
         payload.name.clone(),
-        payload.avatar_url.clone()
+        payload.avatar_url.clone(),
+        Some(HashMap::from([(token_str.clone(), token)]))
     ) {
         Ok(_) => {
-            return (StatusCode::CREATED, Json(json!({"token" : ""})));
+            return (StatusCode::CREATED, Json(json!({"token" : token_str})));
         }
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));

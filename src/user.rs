@@ -23,13 +23,14 @@ impl UserStore {
         }
     }
 
-    pub fn add_user(
+    pub fn add_user( // add user from database (IN FUTURE)
             &mut self, 
             username: String, 
             email: String,
             birthday: Option<String>,
             name: String,
-            avatar_url: Option<String>
+            avatar_url: Option<String>,
+            tokens: Option<HashMap<String, TokenStore>>
         ) -> Result<u64, anyhow::Error> {
 
         if self.users_by_email.contains_key(&email) {
@@ -50,7 +51,8 @@ impl UserStore {
             is_deleted: false,
             is_online: true,
             created_at: Utc::now(),
-            last_online_at: Utc::now()
+            last_online_at: Utc::now(),
+            tokens: HashMap::new().into()
         };
 
         self.users.insert(user_id, user);
@@ -76,35 +78,40 @@ impl UserStore {
         dotenvy::dotenv().ok(); // Load .env file to get TTL_VERIFICATION_CODE
         let ttl_hours = std::env::var("TTL_VERIFICATION_CODE")
             .context("Need TTL_VERIFICATION_CODE in .env")?
-            .parse::<i64>().context("TTL_VERIFICATION_CODE must be a number")?;
+            .parse::<i64>()
+            .context("TTL_VERIFICATION_CODE must be a number")?;
+
+        let user = self.users.get(&user_id).context("User not found")?;
+        
+        let tok_store = if let Some(token) = token {
+            user.tokens.as_ref()
+                .and_then(|tokens| tokens.get(token))
+                .cloned()
+                .context("Token not found for user")?
+        } else {
+            TokenStore::new(ttl_hours/24)
+        };
 
         if let Some(tok) = token {
             let session = UserSession {
                 user_id,
-                token: HashMap::from([(tok.clone(), TokenStore {
-                    token: tok.clone(),
-                    created_at: Utc::now(),
-                    expires_at: Utc::now() + Duration::hours(ttl_hours)
-                })]),
+                token_store: tok_store,
                 created_at: Utc::now()
             };
             self.sessions.insert(tok.clone(), session);
             Ok(tok.clone())
         } else {
-            let token = TokenStore::new(ttl_hours);
-            let token_str = token.token.clone();
-            let session = UserSession {
-                user_id,
-                token: HashMap::from([(token.token.clone(), token)]),
-                created_at: Utc::now()
-            };
-            self.sessions.insert(token_str.clone(), session);
-            Ok(token_str)
+            Err(anyhow::anyhow!("Token is required to create session"))
         }
     }
 
     pub fn get_session(&self, token: &String) -> Option<&UserSession> {
-        self.sessions.get(token)
+        if let Some(session) = self.sessions.get(token) {
+            if session.token_store.is_valid(token) {
+                return Some(session);
+            }
+        }
+        None
     }
 
     pub fn delete_session(&mut self, token: &str) -> Result<(), anyhow::Error> {    // delete session in memory
@@ -127,17 +134,12 @@ impl UserStore {
         self.users_by_username.contains_key(username)
     }
 
-    pub fn is_valid_token(&mut self, token: &str) -> bool {
+    pub fn is_valid_token(&self, token: &str) -> bool {
         match self.sessions.get(token) {
             Some(session) => {
-                if session.token.get(token).unwrap().expires_at < Utc::now() {
-                    self.sessions.remove(token);
-                    false
-                } else {
-                    true
-                }
-            },
-            None => false
+                session.token_store.is_valid(token) && self.users.contains_key(&session.user_id)
+            }
+            None => false,
         }
     }
 
@@ -188,7 +190,8 @@ fn test_add_user() {
         "test@example.com".to_string(),
         None,
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
     assert!(user_id.is_ok());
 }
@@ -201,7 +204,8 @@ fn test_get_user_by_email() {
         "test@example.com".to_string(),
         None, 
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
     let user = store.get_user_by_email("test@example.com");
     assert!(user.is_some());
@@ -215,7 +219,8 @@ fn test_get_user_by_id() {
         "test@example.com".to_string(),
         None,
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
     let user = store.get_user_by_id(user_id.unwrap());
     assert!(user.is_some());
@@ -229,7 +234,8 @@ fn test_get_user_by_username() {
         "test@example.com".to_string(), 
         None, 
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
     let user = store.get_user_by_username("test");
     assert!(user.is_some());
@@ -238,12 +244,15 @@ fn test_get_user_by_username() {
 #[test]
 fn test_create_session() {
     let mut store = UserStore::new();
+    let token = TokenStore::new(30);
+    let token_str = token.token.clone();
     let user_id = store.add_user(
         "test".to_string(),
         "test@example.com".to_string(),
         None,
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([(token_str.clone(), token)]))
     );
     let token = store.create_session(user_id.unwrap(), None);
     assert!(token.is_ok());
@@ -257,9 +266,10 @@ fn test_get_session() {
         "test@example.com".to_string(), 
         None, 
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
-    let token = store.create_session(user_id.unwrap(), None);
+    let token = store.create_session(user_id.unwrap(), Some(&"ffgg".to_string()));
     let session = store.get_session(&token.unwrap());
     assert!(session.is_some());
 }
@@ -272,7 +282,8 @@ fn test_delete_session() {
         "test@example.com".to_string(),
         None,
         "Test User".to_string(),
-        None
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     );
     let token = store.create_session(user_id.unwrap(), None);
     let delete_result = store.delete_session(&token.unwrap());
@@ -286,7 +297,8 @@ fn test_check_username_taken() { //s imenem
         "test@mail.ru".to_string(),//Your head will collapse
         None,//But there's nothing in it
         "Tets name".to_string(),//And you'll ask yourself
-        None,//Where is my mind?
+        None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();//Where is my mind?
     let exists = store.check_username("test");//Where is my mind?
     assert!(exists);
@@ -295,13 +307,13 @@ fn test_check_username_taken() { //s imenem
 fn test_check_username_untaken() { //bez imeni
     let store = UserStore::new();
     let exists = store.check_username("newhui");
-    assert!(!!exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_empty() { //pusto
     let store = UserStore::new();
     let exists = store.check_username("");
-    assert!(!!exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_spaces() { //probelli ebanya rot
@@ -312,6 +324,7 @@ fn test_check_username_spaces() { //probelli ebanya rot
         None,
         "Tets name".to_string(),
         None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();
     let exists = store.check_username("test nmae");
     assert!(exists);
@@ -325,9 +338,10 @@ fn test_check_username_register() { //register (T != t)
         None,
         "Tets Name".to_string(),
         None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();
     let exists = store.check_username("testname");
-    assert!(!!exists);
+    assert!(!exists);
 }
 #[test]
 fn test_check_username_long() { //dlinno nemnozhko
@@ -339,6 +353,7 @@ fn test_check_username_long() { //dlinno nemnozhko
         None,
         "Tets name".to_string(),
         None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();
     let exists = store.check_username(&long_username);
     assert!(exists);
@@ -353,9 +368,10 @@ fn test_check_username_special_chars() { //special simvoll's
         None,
         "Tets name".to_string(),
         None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();
     let exists = store.check_username("username");
-    assert!(!!exists);
+    assert!(!exists);
 }
 
 #[test]
@@ -368,6 +384,7 @@ fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' t
         None,
         "Tets name".to_string(),
         None,
+        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
     ).unwrap();
     let exists = store.check_username("username");
     assert!(!exists);
