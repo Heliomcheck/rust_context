@@ -1,9 +1,11 @@
-use crate::{structs::{User, UserSession}, token::TokenStore, user};
+use crate::{structs::{User, UserSession}, TokenStore, user};
 use std::{collections::HashMap, f32::consts::E, ptr::null};
 use chrono::{Utc, Duration};
 use anyhow::{Context, Ok, Result};
 use std::convert::Into;
 use std::sync::Arc;
+
+use crate::secrets::*;
 
 pub struct UserStore { // In-memory user store
     pub users: HashMap<u64, User>,           // id -> User

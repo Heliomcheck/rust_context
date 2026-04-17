@@ -35,8 +35,8 @@ pub struct RegisterRequest {
         message = "Birthday format must be xx-xx-xxxx"))]
     pub birthday: Option<String>,
     #[validate(length(min = 1, max = 100,
-        message = "Name cannot be empty"))]
-    pub name: String,
+        message = "Display name cannot be empty"))]
+    pub display_name: String,
     pub avatar_url: Option<String>
 }
 
@@ -67,4 +67,23 @@ pub struct TokenVerifyRequest {
 pub struct CheckUsernameRequest {
     #[validate(length(min = 3, message = "Username must be at least 3 characters"))]
     pub username: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct EditUserRequest {
+    #[validate(length(min = 32, max = 32))]
+    pub token: String,
+    #[validate(length(min = 5, max = 30,
+        message = "Username length must be more than 4 characters"))]
+    pub username: Option<String>,
+    #[validate(email(
+        message = "Email format invalid"))]
+    pub email: Option<String>,
+    #[validate(length(min = 10, max = 10,
+        message = "Birthday format must be xx-xx-xxxx"))]
+    pub birthday: Option<String>,
+    #[validate(length(min = 1, max = 100,
+        message = "Display name cannot be empty"))]
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>
 }

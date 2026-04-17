@@ -17,9 +17,8 @@ mod structs;
 pub(crate) mod mail;
 pub(crate) mod user;
 pub(crate) mod generator;
-pub(crate) mod verification;
+pub(crate) mod secrets;
 pub(crate) mod models;
-pub(crate) mod token;
 pub(crate) mod handlers;
 
 use structs::*;
@@ -28,7 +27,9 @@ use context::*;
 use crate::{
     models::{RegisterRequest, TokenVerifyRequest, VerifyCodeRequest, CodeRequest, validation_errors_to_response},
     user::UserStore,
-    handlers::auth::*
+    handlers::auth::*,
+    secrets::token::TokenStore,
+    secrets::verification::VerificationStore
 };
 
 async fn health_handler() -> &'static str {
@@ -42,7 +43,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
     let user_store = Arc::new(Mutex::new(UserStore::new()));
-    let verification_store = Arc::new(Mutex::new(verification::VerificationStore::new()));
+    let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
 
     let state = Arc::new(AppState {tx, user_store, verification_store});
 
@@ -53,6 +54,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/auth/token-validate", routing::post(token_validate_handler))
         .route("/auth/logout", routing::post(logout_handler)) 
         .route("/auth/check-username", routing::post(username_check_handler))
+
+        .route("/user/edit", routing::post(user_edit_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
@@ -65,7 +68,9 @@ async fn main() -> Result<(), anyhow::Error> {
     // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
-    
+    // POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}
+    // GET /user/get-data {token: ""} -> {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} or {error: "reason"}
+
     // POST /user/avatar 
     // GET /avatars/{user_id}.(jpg, png, jpeg)
     

@@ -1,6 +1,6 @@
 use futures_util::future::ok;
 use tokio::{net::TcpListener, sync::broadcast};
-use anyhow::{Context, Result}; 
+use anyhow::{Context}; 
 use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoResponse, routing::{self, trace}
         };
 use axum_macros::debug_handler;
@@ -8,21 +8,23 @@ use axum::extract::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use axum::Json;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 use axum::http::StatusCode;
 use serde_json::json;
 use axum::body::Body;
 use axum::http::Request;
 use tower::util::ServiceExt;
+use std::collections::HashMap;
+use std::result::Result;
 
-use crate::{models::CheckUsernameRequest, structs::*, token::{self, TokenStore}};
+use crate::{models::CheckUsernameRequest, structs::*, secrets::token::{self, TokenStore}};
 use crate::context::*;
 use crate::mail::send_mail_verif_code;
 
 use crate::{
-    models::{RegisterRequest, TokenVerifyRequest, VerifyCodeRequest, CodeRequest, validation_errors_to_response},
-    user::UserStore,
-    verification::VerificationStore
+    models::*,
+    user::*,
+    secrets::verification::VerificationStore
 };
 
 pub async fn register_handler(
@@ -33,11 +35,13 @@ pub async fn register_handler(
         return validation_errors_to_response(errors);
     }
     
-    if state.user_store.lock().await.check_username(&payload.username.as_str()) {
+    let mut user_store = state.user_store.lock().await;
+    
+    if user_store.check_username(&payload.username) {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Username is already taken" })));
     }
-
-    if Some(state.user_store.lock().await.get_user_by_email(&payload.email.as_str())).is_some() {
+    
+    if user_store.get_user_by_email(&payload.email).is_some() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
     }
 
@@ -48,13 +52,11 @@ pub async fn register_handler(
         payload.username.clone(),
         payload.email.clone(),
         payload.birthday.clone(),
-        payload.name.clone(),
+        payload.display_name.clone(),
         payload.avatar_url.clone(),
         Some(HashMap::from([(token_str.clone(), token)]))
     ) {
-        Ok(_) => {
-            return (StatusCode::CREATED, Json(json!({"token" : token_str})));
-        }
+        Ok(_) => (StatusCode::CREATED, Json(json!({"token" : token_str}))),
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
         }
@@ -137,6 +139,7 @@ pub async fn username_check_handler(
     let exists = state.user_store.lock().await.check_username(&payload.username);
     (StatusCode::OK, Json(json!({"available": !exists})))
 }
+
 //test
 #[tokio::test]//registretion check
 async fn test_register_handler() {
