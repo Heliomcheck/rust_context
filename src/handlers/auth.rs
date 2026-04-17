@@ -16,6 +16,8 @@ use axum::http::Request;
 use tower::util::ServiceExt;
 use std::collections::HashMap;
 use std::result::Result;
+use axum_extra::TypedHeader;
+use headers::{Authorization, authorization::Bearer};
 
 use crate::{models::CheckUsernameRequest, structs::*, secrets::token::{self, TokenStore}};
 use crate::context::*;
@@ -101,28 +103,26 @@ pub async fn verify_code_handler(
 }
 
 pub async fn token_validate_handler(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<TokenVerifyRequest>
+    auth: TypedHeader<Authorization<Bearer>>,
+    State(state): State<Arc<AppState>>
 ) -> impl IntoResponse {
-    if let Err(errors) = payload.validate() {
-        return validation_errors_to_response(errors);
-    }
-    match state.user_store.lock().await.is_valid_token(&payload.token) {
+
+    let token = auth.token();
+    match state.user_store.lock().await.is_valid_token(&token) {
         true => (StatusCode::OK, Json(json!({"success": true}))),
         false => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": format!("Token validation failed")})))
     }
 }
 
 pub async fn logout_handler(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<TokenVerifyRequest>
+    auth: TypedHeader<Authorization<Bearer>>,
+    State(state): State<Arc<AppState>>
 ) -> impl IntoResponse {
-    if let Err(errors) = payload.validate() {
-        return validation_errors_to_response(errors);
-    }
-    match state.user_store.lock().await.is_valid_token(&payload.token) {
+
+    let token = auth.token();
+    match state.user_store.lock().await.is_valid_token(&token) {
         true => {
-            let _ = state.user_store.lock().await.delete_session(&payload.token);
+            let _ = state.user_store.lock().await.delete_session(&token);
             return (StatusCode::OK, Json(json!({"success": true})));
         },
         false => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": format!("Logout failed")})))

@@ -25,9 +25,9 @@ use structs::*;
 use context::*;
 
 use crate::{
-    models::{RegisterRequest, TokenVerifyRequest, VerifyCodeRequest, CodeRequest, validation_errors_to_response},
     user::UserStore,
     handlers::auth::*,
+    handlers::user::*,
     secrets::token::TokenStore,
     secrets::verification::VerificationStore
 };

@@ -11,6 +11,9 @@ use axum::Json;
 use validator::Validate;
 use axum::http::StatusCode;
 use serde_json::json;
+//use axum_auth::{Json, TypedHeader, headers::{Authorization, authorization::Bearer}};
+use axum_extra::TypedHeader;
+use headers::{Authorization, authorization::Bearer};
 
 use crate::{models::CheckUsernameRequest, structs::*, secrets::token::{self, TokenStore}};
 
@@ -21,6 +24,7 @@ use crate::{
 };
 
 pub async fn user_edit_handler(
+        auth: TypedHeader<Authorization<Bearer>>,
         State(state): State<Arc<AppState>>,
         Json(payload): Json<EditUserRequest>,
     ) -> impl IntoResponse {
@@ -28,7 +32,7 @@ pub async fn user_edit_handler(
             return validation_errors_to_response(errors);
         }
 
-        let token = payload.token.clone();
+        let token = auth.token();
         let user_store = state.user_store.lock().await;
         
         let user_id = match user_store.get_session(&token) { // check session
