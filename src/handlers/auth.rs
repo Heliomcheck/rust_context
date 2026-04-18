@@ -19,8 +19,7 @@ use std::result::Result;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 
-use crate::{models::CheckUsernameRequest, structs::*, secrets::token::{self, TokenStore}};
-use crate::context::*;
+use crate::{models::CheckUsernameRequest, structs::*, secrets::token::*};
 use crate::mail::send_mail_verif_code;
 
 use crate::{

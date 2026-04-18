@@ -49,7 +49,7 @@ pub struct User {
     pub is_online: bool,
     pub created_at: DateTime<Utc>,
     pub last_online_at: DateTime<Utc>,
-    pub tokens: Option<HashMap<String, TokenStore>>
+    pub tokens: Option<HashMap<String, TokenStore>> // token -> TokenStore
 }
 
 impl User { 

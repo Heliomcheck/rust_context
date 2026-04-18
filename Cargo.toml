@@ -23,3 +23,4 @@ validator = { version = "0.16", features = ["derive"] }
 tower = { version = "0.4", features = ["util"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 headers = "0.4"
+sqlx = { version = "0.6", features = ["postgres", "runtime-tokio-native-tls", "macros"] }
