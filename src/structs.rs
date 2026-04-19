@@ -1,3 +1,4 @@
+use sqlx::prelude::FromRow;
 use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
@@ -36,9 +37,9 @@ pub struct Event {
     pub list_user_ids: Option<Vec<u64>>
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromRow)]
 pub struct User {
-    pub id: u64,
+    pub id: i64,
     pub name: String,
     pub username: String,
     pub email: String,
@@ -48,8 +49,7 @@ pub struct User {
     pub is_deleted: bool,
     pub is_online: bool,
     pub created_at: DateTime<Utc>,
-    pub last_online_at: DateTime<Utc>,
-    pub tokens: Option<HashMap<String, TokenStore>> // token -> TokenStore
+    pub last_online_at: DateTime<Utc>
 }
 
 impl User { 
@@ -73,8 +73,7 @@ impl User {
             is_deleted: false,
             is_online: true,
             created_at: Utc::now(),
-            last_online_at: Utc::now(),
-            tokens: tokens
+            last_online_at: Utc::now()
         }
     }
 

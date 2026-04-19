@@ -20,6 +20,7 @@ pub(crate) mod generator;
 pub(crate) mod secrets;
 pub(crate) mod models;
 pub(crate) mod handlers;
+pub(crate) mod db;
 
 use structs::*;
 use context::*;

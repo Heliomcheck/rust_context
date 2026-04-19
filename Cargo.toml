@@ -14,7 +14,6 @@ futures-util = "0.3"
 futures-macro = "=0.3.32"
 dotenvy = "0.15.7"
 lettre = {version = "0.11.20", features = ["smtp-transport", "tokio1-native-tls", "builder"]}
-chrono = "0.4.44"
 uuid = { version = "1.23.0", features = ["v4"] }
 rand = "0.10.0"
 hex = "0.4"
@@ -23,4 +22,5 @@ validator = { version = "0.16", features = ["derive"] }
 tower = { version = "0.4", features = ["util"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 headers = "0.4"
-sqlx = { version = "0.6", features = ["postgres", "runtime-tokio-native-tls", "macros"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
+chrono = { version = "0.4", features = ["serde"] }
