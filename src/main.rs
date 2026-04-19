@@ -1,14 +1,12 @@
 use tokio::{net::TcpListener, sync::broadcast};
 use anyhow::{Context, Result}; 
-use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoResponse, routing::{self, trace}
+use axum::{Router, extract::ws::{WebSocketUpgrade}, response::IntoResponse, routing::{self}
         };
-use axum_macros::debug_handler;
 use axum::extract::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use axum::body::Body;
-use axum::http::Request;
-use tower::util::ServiceExt;
+use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod context;
 mod structs;
@@ -20,7 +18,7 @@ pub(crate) mod generator;
 pub(crate) mod secrets;
 pub(crate) mod models;
 pub(crate) mod handlers;
-pub(crate) mod db;
+pub(crate) mod data_base;
 
 use structs::*;
 use context::*;
@@ -30,7 +28,8 @@ use crate::{
     handlers::auth::*,
     handlers::user::*,
     secrets::token::TokenStore,
-    secrets::verification::VerificationStore
+    secrets::verification::VerificationStore,
+    data_base::user_db::create_pool
 };
 
 async fn health_handler() -> &'static str {
@@ -40,23 +39,38 @@ async fn health_handler() -> &'static str {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    dotenvy::dotenv().ok();
     let args: Vec<String> = std::env::args().collect();
+
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+
+    let file_appender = rolling::daily("logs", "app.log");
+    let (non_blocking, _guard) = non_blocking(file_appender);
+    
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(non_blocking)) 
+        .with(EnvFilter::from_default_env())
+        .init();
 
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
     let user_store = Arc::new(Mutex::new(UserStore::new()));
     let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
+    let db_pool = create_pool(&database_url.as_str()).await?;
 
-    let state = Arc::new(AppState {tx, user_store, verification_store});
+    let state = Arc::new(AppState {tx, user_store, verification_store, db_pool});
 
     let app = Router::new()
         .route("/auth/request-code", routing::post(request_code_handler))
         .route("/auth/verify-code", routing::post(verify_code_handler))
         .route("/auth/register", routing::post(register_handler))
         .route("/auth/token-validate", routing::post(token_validate_handler))
-        .route("/auth/logout", routing::post(logout_handler)) 
+        //.route("/auth/logout", routing::post(logout_handler)) 
         .route("/auth/check-username", routing::post(username_check_handler))
 
         .route("/user/edit", routing::post(user_edit_handler))
+        //.route("/user/stay-online", routing::post(stay_online_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
@@ -94,52 +108,3 @@ async fn websocket_handler(
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
-//test
-// #[tokio::test]//endpoint check(OK?)
-// async fn test_health_handler() {
-//     use axum::{Router, routing::get};
-//     use axum::body::Body;
-//     use axum::http::Request;
-//     use tower::util::ServiceExt;
-//     async fn health_handler() -> &'static str {"OK"}
-//     let app = Router::new().route("/health", get(health_handler));
-//     let request = Request::builder()
-//         .uri("/health")
-//         .body(Body::empty())
-//         .unwrap();
-//     let response = app.oneshot(request).await.unwrap();
-//     assert_eq!(response.status(), axum::http::StatusCode::OK);
-// }
-// #[tokio::test]//registretion check
-// async fn test_sign_up_handler() {
-//     use tower::ServiceExt;
-
-//     let state = Arc::new(AppState {
-//         tx: broadcast::channel(10).0,
-//         user_store: Arc::new(Mutex::new(UserStore::new())),
-//         verification_codes: Arc::new(Mutex::new(mail::VerificationCode::new())),
-//     });
-
-//     let app = Router::new()
-//         .route("/auth/register", routing::post(sign_up_handler))
-//         .with_state(state);
-
-//     let payload = json!({
-//         "username": "testuser",
-//         "email": "test@mail.com",
-//         "birthday": null,
-//         "name": "Test",
-//         "avatar_url": null
-//     });
-
-//     let request: Request<Body> = Request::builder()
-//         .method("POST")
-//         .uri("/auth/register")
-//         .header("content-type", "application/json")
-//         .body(Body::from(payload.to_string()))
-//         .unwrap();
-
-//     let response = app.oneshot(request).await.unwrap();
-
-//     assert_eq!(response.status(), axum::http::StatusCode::CREATED);
-// }

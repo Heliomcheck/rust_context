@@ -1,3 +1,4 @@
+use chrono::Utc;
 use futures_util::future::ok;
 use tokio::{net::TcpListener, sync::broadcast};
 use anyhow::{Context}; 
@@ -18,9 +19,11 @@ use std::collections::HashMap;
 use std::result::Result;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
+use sqlx::PgPool;
 
-use crate::{models::CheckUsernameRequest, structs::*, secrets::token::*};
+use crate::{data_base::user_db::{create_token, create_user_db, validate_token}, models::CheckUsernameRequest, secrets::token::*, structs::*};
 use crate::mail::send_mail_verif_code;
+use crate::generator::Generator;
 
 use crate::{
     models::*,
@@ -46,8 +49,24 @@ pub async fn register_handler(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
     }
 
-    let token = TokenStore::new(30);
-    let token_str = token.token.clone();
+    let user_id = create_user_db(&state.db_pool, &payload.username, &payload.email, &payload.display_name, &payload.birthday, &payload.avatar_url).await;
+    let user_id = match user_id {
+        Ok(id) => {id},
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
+        }
+    };
+
+    let token_gen = Generator::new_session_token();
+    let token = create_token(
+        &state.db_pool, user_id, &token_gen, Utc::now() + chrono::Duration::days(30)).await;
+    let token_str = match token {
+        Ok(t) => {t},
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create session token: {e}" )})));
+        }
+    };
+    
     let mut user_store = state.user_store.lock().await;
     match user_store.add_user(
         payload.username.clone(),
@@ -55,9 +74,9 @@ pub async fn register_handler(
         payload.birthday.clone(),
         payload.display_name.clone(),
         payload.avatar_url.clone(),
-        Some(HashMap::from([(token_str.clone(), token)]))
-    ) {
-        Ok(_) => (StatusCode::CREATED, Json(json!({"token" : token_str}))),
+        &state.db_pool
+    ).await {
+        Ok(_) => return (StatusCode::CREATED, Json(json!({"token" : token_str}))),
         Err(e) => {
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
         }
@@ -107,24 +126,10 @@ pub async fn token_validate_handler(
 ) -> impl IntoResponse {
 
     let token = auth.token();
-    match state.user_store.lock().await.is_valid_token(&token) {
-        true => (StatusCode::OK, Json(json!({"success": true}))),
-        false => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": format!("Token validation failed")})))
-    }
-}
-
-pub async fn logout_handler(
-    auth: TypedHeader<Authorization<Bearer>>,
-    State(state): State<Arc<AppState>>
-) -> impl IntoResponse {
-
-    let token = auth.token();
-    match state.user_store.lock().await.is_valid_token(&token) {
-        true => {
-            let _ = state.user_store.lock().await.delete_session(&token);
-            return (StatusCode::OK, Json(json!({"success": true})));
-        },
-        false => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": format!("Logout failed")})))
+    match validate_token(&state.db_pool, token).await {
+        Ok(true) => (StatusCode::OK, Json(json!({"success": true}))),
+        Ok(false) => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": "Invalid or expired token"}))),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Token validation failed: {e}")})))
     }
 }
 
@@ -148,6 +153,7 @@ async fn test_register_handler() {
         tx: broadcast::channel(10).0,
         user_store: Arc::new(Mutex::new(UserStore::new())),
         verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: PgPool::connect("postgres://user:password@localhost/test_db").await.unwrap()
     });
 
     let app = Router::new()

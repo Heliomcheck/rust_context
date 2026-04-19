@@ -1,18 +1,21 @@
-use crate::{structs::{User, UserSession}, TokenStore, user};
+use crate::{structs::{User}, TokenStore, user};
 use std::{collections::HashMap, f32::consts::E, ptr::null};
 use chrono::{Utc, Duration};
 use anyhow::{Context, Ok, Result};
+use tracing::info;
 use std::convert::Into;
 use std::sync::Arc;
+use sqlx::PgPool;
+use anyhow::Error;
+use crate::models::EditUserRequest;
 
 use crate::secrets::*;
+use crate::data_base::user_db::*;
 
 pub struct UserStore { // In-memory user store
-    pub users: HashMap<u64, User>,           // id -> User
-    pub users_by_email: HashMap<String, u64>, // email -> id
-    pub users_by_username: HashMap<String, u64>, // username -> id
-    pub sessions: HashMap<String, UserSession>, // token -> session
-    pub next_id: u64,
+    pub users: HashMap<i64, User>,           // id -> User
+    pub users_by_email: HashMap<String, i64>, // email -> id
+    pub users_by_username: HashMap<String, i64>, // username -> id
 }
 
 impl UserStore {
@@ -20,21 +23,19 @@ impl UserStore {
         UserStore {
             users: HashMap::new(),
             users_by_email: HashMap::new(),
-            users_by_username: HashMap::new(),
-            sessions: HashMap::new(),
-            next_id: 1,     // Connect to database and get the last id (in future)
+            users_by_username: HashMap::new()  // Connect to database and get the last id (in future)
         }
     }
 
-    pub fn add_user( // add user from database (IN FUTURE)
+    pub async fn add_user( // add user from database (IN FUTURE) p.s. future is coming ;)
             &mut self, 
             username: String, 
             email: String,
             birthday: Option<String>,
             name: String,
             avatar_url: Option<String>,
-            tokens: Option<HashMap<String, TokenStore>>
-        ) -> Result<u64, anyhow::Error> {
+            pool: &PgPool
+        ) -> Result<i64, anyhow::Error> {
 
         if self.users_by_email.contains_key(&email) { // only in memory, in future check in database
             return Err(anyhow::anyhow!("Email already exists"));
@@ -44,25 +45,35 @@ impl UserStore {
             return Err(anyhow::anyhow!("Username already exists"));
         }
 
-        let user_id = self.next_id;
-        self.next_id += 1;
-
+        let user_id = create_user_db(pool, &username, &email, &name, &birthday, &avatar_url).await?;
+        
         let user = User::create(user_id, username.clone(),
-            email.clone(), birthday, name, avatar_url, tokens
+            email.clone(), birthday.clone(), name.clone(), avatar_url.clone()
         );
 
         self.users.insert(user_id, user);
-        self.users_by_email.insert(email, user_id);
-        self.users_by_username.insert(username, user_id);
+        self.users_by_email.insert(email.to_string(), user_id);
+        self.users_by_username.insert(username.to_string(), user_id);
 
         Ok(user_id)
     }
+
+    // pub async fn edit_user(&mut self, payload: EditUserRequest) {
+    //     if let Some(user_id) = self.users_by_username.get(&payload.username.unwrap_or_else(|| )) {
+    //         if let Some(user) = self.users.get_mut(user_id) {
+    //             user.name = payload.display_name.clone().unwrap_or_else(|| user.name.clone());
+    //             user.email = payload.email.clone().unwrap_or_else(|| user.email.clone());
+    //             user.birthday = payload.birthday.clone().or_else(|| user.birthday.clone());
+    //             user.avatar_url = payload.avatar_url.clone().or_else(|| user.avatar_url.clone());
+    //         }
+    //     }
+    // }
 
     pub fn get_user_by_email(&self, email: &str) -> Option<&User> {
         self.users_by_email.get(email).and_then(|id| self.users.get(id))
     }
 
-    pub fn get_user_by_id(&self, id: u64) -> Option<&User> {
+    pub fn get_user_by_id(&self, id: i64) -> Option<&User> {
         self.users.get(&id)
     }
 
@@ -70,72 +81,8 @@ impl UserStore {
         self.users_by_username.get(username).and_then(|id| self.users.get(id))
     }
 
-    pub fn create_session(&mut self, user_id: u64, token: &String) -> Result<(), anyhow::Error> {
-        
-        let user = self.get_user_by_id(user_id) // check if user exists
-            .ok_or_else(|| anyhow::anyhow!("User not found"))?;
-        
-        let tokens = user.tokens.as_ref() // check if user has tokens
-            .ok_or_else(|| anyhow::anyhow!("No tokens found for this user"))?;
-        
-        let token_store = tokens.get(token) // check if token exists for this user
-            .ok_or_else(|| anyhow::anyhow!("Token not found for this user"))?;
-        
-        if !token_store.is_valid(token) { // check if token is valid
-            return Err(anyhow::anyhow!("Token has expired"));
-        }
-        
-        let session = UserSession::create(user_id, token.to_string());
-        self.sessions.insert(token.to_string(), session);
-        Ok(())
-    }
-
-    pub fn get_session(&self, token: &str) -> Option<&UserSession> {
-        self.get_token_store(token).map(|_| self.sessions.get(token))?
-    }
-
-    pub fn delete_session(&mut self, token: &str) -> Result<(), anyhow::Error> {
-        let session = self.sessions.remove(token).context("Session not found")?;
-        let user_id = session.user_id;
-        
-        if let Some(user) = self.users.remove(&user_id) {
-            self.users_by_email.remove(&user.email);
-            self.users_by_username.remove(&user.username);
-        }
-        
-        Ok(())
-    }
-
-    pub fn get_token_store(&self, token: &str) -> Option<&TokenStore> {
-        self.sessions.get(token).and_then(|session| {
-            self.users.get(&session.user_id).and_then(|user| {
-                user.tokens.as_ref().and_then(|tokens| tokens.get(token))
-            })
-        })
-    }
-
-    pub fn check_username(&self, username: &str) -> bool {
+    pub fn check_username(&self, username: &str) -> bool { // refactor
         self.users_by_username.contains_key(username)
-    }
-
-    pub fn is_valid_token(&self, token: &str) -> bool {
-        let session = match self.sessions.get(token) { // find user session by token
-            Some(s) => s,
-            None => return false,
-        };
-        
-        let user = match self.users.get(&session.user_id) { // find user in UserStoer by session user_id
-            Some(u) => u,
-            None => return false,
-        };
-        
-        match user.tokens.as_ref() {
-            Some(tokens) => tokens // check if token exists for this user and is valid
-                .get(token)
-                .map(|ts| !ts.is_expired())
-                .unwrap_or(false),
-            None => false,
-        }
     }
 }
 
@@ -146,41 +93,57 @@ fn test_new(){
     assert!(store.users.is_empty());
     assert!(store.users_by_email.is_empty());
     assert!(store.users_by_username.is_empty());
-    assert!(store.sessions.is_empty());
-    assert_eq!(store.next_id, 1);
 }
 
-#[test]
-fn test_add_user() {
+#[tokio::test]
+async fn test_add_user() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+
     let mut store = UserStore::new();
+    let pool = create_pool(&database_url).await?;
     let user_id = store.add_user(
         "test".to_string(),
         "test@example.com".to_string(),
         None,
         "Test User".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
+        &pool
     );
-    assert!(user_id.is_ok());
+    assert!(user_id.await.is_ok());
+
+    Ok(())
 }
 
-#[test]
-fn test_get_user_by_email() {
+#[tokio::test]
+async fn test_get_user_by_email() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+
     let mut store = UserStore::new();
-    let user_id = store.add_user(
+    let pool = create_pool(&database_url).await?;
+    let _ = store.add_user(
         "test".to_string(),
         "test@example.com".to_string(),
         None, 
         "Test User".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    );
+        &pool
+    ).await?;
     let user = store.get_user_by_email("test@example.com");
     assert!(user.is_some());
+    Ok(())
 }
 
-#[test]
-fn test_get_user_by_id() {
+#[tokio::test]
+async fn test_get_user_by_id() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     let user_id = store.add_user(
         "test".to_string(),
@@ -188,81 +151,41 @@ fn test_get_user_by_id() {
         None,
         "Test User".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    );
-    let user = store.get_user_by_id(user_id.unwrap());
+        &pool
+    ).await?;
+    let user = store.get_user_by_id(user_id);
     assert!(user.is_some());
+    Ok(())
 }
 
-#[test]
-fn test_get_user_by_username() {
+#[tokio::test]
+async fn test_get_user_by_username() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
-    let user_id = store.add_user(
+    let _ = store.add_user(
         "test".to_string(), 
         "test@example.com".to_string(), 
         None, 
         "Test User".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    );
+        &pool
+    ).await?;
     let user = store.get_user_by_username("test");
     assert!(user.is_some());
+    Ok(())
 }
 
-#[test]
-fn test_create_session() {
-    let mut store = UserStore::new();
-    let token = TokenStore::new(30);
-    let token_str = token.token.clone();
-    let user_id = store.add_user(
-        "test".to_string(),
-        "test@example.com".to_string(),
-        None,
-        "Test User".to_string(),
-        None,
-        Some(HashMap::from([(token_str.clone(), token)]))
-    );
-    let token = store.create_session(user_id.unwrap(), &token_str);
-    assert!(token.is_ok());
-}
+#[tokio::test]
+async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
 
-#[test]
-fn test_get_session() {
-    let mut store = UserStore::new();
-    let token = TokenStore::new(30);
-    let token_str = token.token.clone();
-    let user_id = store.add_user(
-        "test".to_string(),
-        "test@example.com".to_string(), 
-        None, 
-        "Test User".to_string(),
-        None,
-        Some(HashMap::from([(token_str.clone(), token)]))
-    );
-    let _ = store.create_session(user_id.unwrap(), &token_str);
-    let session = store.get_session(&token_str);
-    assert!(session.is_some());
-}
-
-#[test]
-fn test_delete_session() {
-    let mut store = UserStore::new();
-    let token = TokenStore::new(30);
-    let token_str = token.token.clone();
-    let user_id = store.add_user(
-        "test".to_string(),
-        "test@example.com".to_string(),
-        None,
-        "Test User".to_string(),
-        None,
-        Some(HashMap::from([(token_str.clone(), token)]))
-    );
-    let token = store.create_session(user_id.unwrap(), &token_str);
-    let delete_result = store.delete_session(&token_str);
-    assert!(delete_result.is_ok());
-}
-#[test]
-fn test_check_username_taken() { //s imenem
     let mut store = UserStore::new();
     store.add_user(//With your feet in the air and your head on the ground
         "test".to_string(),//Try this trick and spin it, yeah
@@ -270,25 +193,33 @@ fn test_check_username_taken() { //s imenem
         None,//But there's nothing in it
         "Tets name".to_string(),//And you'll ask yourself
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();//Where is my mind?
-    let exists = store.check_username("test");//Where is my mind?
+        &pool
+    ).await?;
+    let exists = store.check_username("test");
     assert!(exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_untaken() { //bez imeni
+#[tokio::test]
+async fn test_check_username_untaken() -> anyhow::Result<()> { //bez imeni
     let store = UserStore::new();
     let exists = store.check_username("newhui");
     assert!(!exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_empty() { //pusto
+#[tokio::test]
+async fn test_check_username_empty() -> anyhow::Result<()> { //pusto
     let store = UserStore::new();
     let exists = store.check_username("");
     assert!(!exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_spaces() { //probelli ebanya rot
+#[tokio::test]
+async fn test_check_username_spaces() -> anyhow::Result<()> { //probelli ebanya rot
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     store.add_user(
         "test nmae".to_string(),
@@ -296,13 +227,19 @@ fn test_check_username_spaces() { //probelli ebanya rot
         None,
         "Tets name".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();
+        &pool
+    ).await?;
     let exists = store.check_username("test nmae");
     assert!(exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_register() { //register (T != t)
+#[tokio::test]
+async fn test_check_username_register() -> anyhow::Result<()> { //register (T != t)
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     store.add_user(
         "testName".to_string(),
@@ -310,13 +247,19 @@ fn test_check_username_register() { //register (T != t)
         None,
         "Tets Name".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();
+        &pool
+    ).await?;
     let exists = store.check_username("testname");
     assert!(!exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_long() { //dlinno nemnozhko
+#[tokio::test]
+async fn test_check_username_long() -> anyhow::Result<()> { //dlinno nemnozhko
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     let long_username = "sigmaboy".repeat(1000);
     store.add_user(
@@ -325,13 +268,20 @@ fn test_check_username_long() { //dlinno nemnozhko
         None,
         "Tets name".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();
+        &pool
+    ).await?;
     let exists = store.check_username(&long_username);
     assert!(exists);
+    Ok(())
 }
-#[test]
-fn test_check_username_special_chars() { //special simvoll's
+
+#[tokio::test]
+async fn test_check_username_special_chars() -> anyhow::Result<()> { //special simvoll's
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     let username = "sigmaboy_123!@#";
     store.add_user(
@@ -340,14 +290,20 @@ fn test_check_username_special_chars() { //special simvoll's
         None,
         "Tets name".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();
+        &pool
+    ).await?;
     let exists = store.check_username("username");
     assert!(!exists);
+    Ok(())
 }
 
-#[test]
-fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
+#[tokio::test]
+async fn test_check_username_unicode() -> anyhow::Result<()> { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL not set")?;
+    let pool = create_pool(&database_url).await?;
+
     let mut store = UserStore::new();
     let username = "Валерыч";
     store.add_user(
@@ -356,8 +312,9 @@ fn test_check_username_unicode() { //Unicode test na niziu (libo mozhno ebnut' t
         None,
         "Tets name".to_string(),
         None,
-        Some(HashMap::from([("ffgg".to_string(), TokenStore::new(30))]))
-    ).unwrap();
+        &pool
+    ).await?;
     let exists = store.check_username("username");
     assert!(!exists);
+    Ok(())
 }

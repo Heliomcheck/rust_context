@@ -3,14 +3,14 @@ use tokio::sync::Mutex;
 use serde::{Serialize, Deserialize};
 use tokio::sync::broadcast;
 use chrono::{DateTime, Utc};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use std::option::Option;
+use sqlx::PgPool;
 
 use crate::user::UserStore;
 
 use crate::secrets::verification::VerificationStore;
-use crate::secrets::token::TokenStore;
-use crate::models::{EditUserRequest, RegisterRequest};
+use crate::models::EditUserRequest;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -47,20 +47,18 @@ pub struct User {
     pub avatar_url: Option<String>,
 
     pub is_deleted: bool,
-    pub is_online: bool,
     pub created_at: DateTime<Utc>,
     pub last_online_at: DateTime<Utc>
 }
 
 impl User { 
     pub fn create(
-        user_id: u64,
+        user_id: i64,
         username: String, 
         email: String,
         birthday: Option<String>,
         name: String,
-        avatar_url: Option<String>,
-        tokens: Option<HashMap<String, TokenStore>>
+        avatar_url: Option<String>
     ) -> Self {
         User {
             username: username,
@@ -71,7 +69,6 @@ impl User {
             avatar_url: avatar_url,
 
             is_deleted: false,
-            is_online: true,
             created_at: Utc::now(),
             last_online_at: Utc::now()
         }
@@ -86,49 +83,16 @@ impl User {
             self.avatar_url = payload.avatar_url.or(self.avatar_url.clone());
 
             self.is_deleted = self.is_deleted;
-            self.is_online = self.is_online;
             self.created_at = self.created_at;
             self.last_online_at = self.last_online_at;
-            self.tokens = self.tokens.clone();
-    }
-
-    pub fn add_token(&mut self, token: TokenStore) -> bool {
-        if let Some(tokens) = &mut self.tokens {
-            tokens.insert(token.token.clone(), token);
-            return true;
-        } else {
-            self.tokens = Some(HashMap::from([(token.token.clone(), token)]));
-            return true;
-        }
-    }
-
-    pub fn remove_token(&mut self, token_str: &str) {
-        if let Some(tokens) = &mut self.tokens {
-            tokens.remove(token_str);
-        }
-    }
-    
-}
-
-pub struct UserSession {
-    pub user_id: u64,
-    pub token_store: String,
-    pub created_at: DateTime<Utc>
-}
-
-impl UserSession {
-    pub fn create(user_id: u64, token: String,) -> Self  {
-        UserSession {
-            user_id,
-            token_store: token,
-            created_at: Utc::now()
-        }
     }
 }
+
 
 #[derive(Clone)]
 pub struct AppState {
     pub tx: broadcast::Sender<ChatMessage>,
     pub user_store: Arc<Mutex<UserStore>>,
-    pub verification_store: Arc<Mutex<VerificationStore>>
+    pub verification_store: Arc<Mutex<VerificationStore>>,
+    pub db_pool: PgPool
 }

@@ -24,3 +24,6 @@ axum-extra = { version = "0.10", features = ["typed-header"] }
 headers = "0.4"
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
