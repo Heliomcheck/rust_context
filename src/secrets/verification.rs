@@ -115,6 +115,23 @@ impl VerificationStore {
         }
         count
     }
+    pub fn can_resend(&self, email: &str, cooldown_seconds: i64) -> bool {
+    if let Some(code) = self.codes.get(email) {
+        let now = Utc::now();
+        let diff = now - code.created_at;
+        return diff.num_seconds() >= cooldown_seconds;
+    }
+    true
+}
+pub fn get_or_create(&mut self, email: &str, ttl_minutes: i64) -> String {
+    if let Some(code) = self.codes.get(email) {
+        if !code.is_expired() {
+            return code.code.clone();
+        }
+    }
+
+    self.create(email, ttl_minutes)
+}
 }
 // Tests 
 #[test]//Никитос ты какойто калл написал кабуто 1000-7 вся фигня
@@ -235,4 +252,31 @@ fn test_cleanup_expired() {
 
     assert_eq!(removed, 2);
     assert!(store.get("a@mail.com").is_none());
+}
+#[test]
+fn test_can_resend_cooldown() {
+    let mut store = VerificationStore::new();
+    store.create("test@mail.com", 15);
+    let can_resend = store.can_resend("test@mail.com", 60);
+    assert!(!can_resend);
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let can_resend = store.can_resend("test@mail.com", 1);
+    assert!(can_resend);
+}
+
+#[test]
+fn test_get_or_create_returns_same_code() {
+    let mut store = VerificationStore::new();
+    let code1 = store.get_or_create("test@mail.com", 15);
+    let code2 = store.get_or_create("test@mail.com", 15);
+    assert_eq!(code1, code2);
+}
+
+#[test]
+fn test_get_or_create_creates_new_if_expired() {
+    let mut store = VerificationStore::new();
+    let code1 = store.get_or_create("test@mail.com", 0);
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    let code2 = store.get_or_create("test@mail.com", 0);
+    assert_ne!(code1, code2);
 }

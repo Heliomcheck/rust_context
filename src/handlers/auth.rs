@@ -205,6 +205,28 @@ pub async fn username_check_handler(
 
     (StatusCode::OK, Json(json!({ "available": !exists })))
 }
+pub async fn resend_code_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CodeRequest>
+) -> impl IntoResponse {
+    if let Err(errors) = payload.validate() {
+        return validation_errors_to_response(errors);
+    }
+
+    match send_mail_verif_code(&payload.email, state).await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({ "success": true, "message": "Code resent" }))
+        ),
+        Err(e) => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "success": false,
+                "error": e.to_string()
+            }))
+        )
+    }
+}
 
 //test
 #[tokio::test]//registretion check

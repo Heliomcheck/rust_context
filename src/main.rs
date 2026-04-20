@@ -66,6 +66,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/auth/request-code", routing::post(request_code_handler))
         .route("/auth/verify-code", routing::post(verify_code_handler))
         .route("/auth/register", routing::post(register_handler))
+        .route("/auth/resend-code", routing::post(resend_code_handler))
         .route("/auth/token-validate", routing::post(token_validate_handler))
         //.route("/auth/logout", routing::post(logout_handler)) 
         .route("/auth/check-username", routing::post(username_check_handler))
