@@ -76,6 +76,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         //.route("/login", routing::get(sign_up_handler))
+        .route("/user/get-data", routing::get(get_user_data_handler))
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}

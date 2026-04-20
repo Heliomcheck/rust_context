@@ -15,6 +15,7 @@ use serde_json::json;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 use sqlx::PgPool;
+use tracing::*;
 
 use crate::{data_base::user_db::find_user_by_token, models::CheckUsernameRequest, secrets::token::{self, TokenStore}, structs::*};
 
@@ -62,4 +63,43 @@ pub async fn user_edit_handler(
     // update user data un UserStore in future
     
     (StatusCode::OK, Json(json!({ "success": true })))
+}
+
+pub async fn get_user_data_handler(
+    auth: TypedHeader<Authorization<Bearer>>,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let token = auth.token();
+    
+    // 1. Находим пользователя по токену
+    let user = match find_user_by_token(&state.db_pool, token).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid or expired token" })));
+        }
+        Err(e) => {
+            error!("Failed to find user by token: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+        }
+    };
+    
+    // 2. Формируем ответ
+    let response = UserDataResponse {
+        id: user.id,
+        username: user.username.clone(),  // ← clone()
+        email: user.email.clone(),        // ← clone()
+        name: user.name.clone(),          // ← clone()
+        birthday: user.birthday.clone(),
+        avatar_url: user.avatar_url.clone()
+    };
+    
+    (StatusCode::OK, Json(json!({
+        //"id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "display_name": user.name,
+        "birthday": user.birthday,
+        //"avatar_url": user.avatar_url,
+        //"created_at": user.created_at,
+    })))
 }

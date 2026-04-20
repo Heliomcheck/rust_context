@@ -34,8 +34,7 @@ pub struct RegisterRequest {
     pub birthday: Option<String>,
     #[validate(length(min = 1, max = 100,
         message = "Display name cannot be empty"))]
-    pub display_name: String,
-    pub avatar_url: Option<String>
+    pub display_name: String
 }
 
 #[derive(Deserialize, Serialize, Validate)]
@@ -77,5 +76,15 @@ pub struct EditUserRequest {
     #[validate(length(min = 1, max = 100,
         message = "Display name cannot be empty"))]
     pub display_name: Option<String>,
+    pub avatar_url: Option<String>
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserDataResponse {
+    pub id: i64,
+    pub username: String,
+    pub email: String,
+    pub name: String,
+    pub birthday: Option<String>,
     pub avatar_url: Option<String>
 }

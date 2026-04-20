@@ -64,6 +64,7 @@ pub async fn register_handler(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
         }
     }
+    let avatar_url = Some("test".to_string());
     
     let user_id = match create_user_db(
         &state.db_pool,
@@ -71,7 +72,7 @@ pub async fn register_handler(
         &payload.email,
         &payload.display_name,
         &payload.birthday,
-        &payload.avatar_url,
+        &avatar_url,
     ).await {
         Ok(id) => id,
         Err(e) => {
@@ -101,7 +102,7 @@ pub async fn register_handler(
         payload.email.clone(),
         payload.birthday.clone(),
         payload.display_name.clone(),
-        payload.avatar_url.clone(),
+        avatar_url.clone(),
         &state.db_pool,
     ).await {
         tracing::warn!("User created in DB but failed to add to cache: {}", e);
