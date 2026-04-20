@@ -20,6 +20,8 @@ use std::result::Result;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 use sqlx::PgPool;
+use crate::{data_base::user_db::*, generator};
+use tracing::*;
 
 use crate::{data_base::user_db::{create_token, create_user_db, validate_token}, models::CheckUsernameRequest, secrets::token::*, structs::*};
 use crate::mail::send_mail_verif_code;
@@ -31,56 +33,81 @@ use crate::{
     secrets::verification::VerificationStore
 };
 
+use crate::test_utils::*;
+
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterRequest>
+    Json(payload): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
     
-    let mut user_store = state.user_store.lock().await;
-    
-    if user_store.check_username(&payload.username) {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Username is already taken" })));
+    match find_user_by_email(&state.db_pool, &payload.email).await {
+        Ok(Some(_)) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email already registered" })));
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+        }
     }
     
-    if user_store.get_user_by_email(&payload.email).is_some() {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Email is already registered" })));
-    }
-
-    let user_id = create_user_db(&state.db_pool, &payload.username, &payload.email, &payload.display_name, &payload.birthday, &payload.avatar_url).await;
-    let user_id = match user_id {
-        Ok(id) => {id},
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
+    match find_user_by_username(&state.db_pool, &payload.username).await {
+        Ok(Some(_)) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Username already taken" })));
         }
-    };
-
-    let token_gen = Generator::new_session_token();
-    let token = create_token(
-        &state.db_pool, user_id, &token_gen, Utc::now() + chrono::Duration::days(30)).await;
-    let token_str = match token {
-        Ok(t) => {t},
+        Ok(None) => {}
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create session token: {e}" )})));
+            tracing::error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+        }
+    }
+    
+    let user_id = match create_user_db(
+        &state.db_pool,
+        &payload.username,
+        &payload.email,
+        &payload.display_name,
+        &payload.birthday,
+        &payload.avatar_url,
+    ).await {
+        Ok(id) => id,
+        Err(e) => {
+            let error_msg = e.to_string();
+            if error_msg.contains("duplicate key") && error_msg.contains("username") {
+                return (StatusCode::CONFLICT, Json(json!({ "error": "Username already taken" })));
+            }
+            if error_msg.contains("duplicate key") && error_msg.contains("email") {
+                return (StatusCode::CONFLICT, Json(json!({ "error": "Email already registered" })));
+            }
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
         }
     };
     
+    let token_str = generator::Generator::new_session_token();
+    let expires_at = Utc::now() + chrono::Duration::days(30);
+    
+    if let Err(e) = create_token(&state.db_pool, user_id, &token_str, expires_at).await {
+        tracing::error!("Failed to create token: {}", e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to create session" })));
+    }
+    
     let mut user_store = state.user_store.lock().await;
-    match user_store.add_user(
+    if let Err(e) = user_store.add_user(
+        user_id,
         payload.username.clone(),
         payload.email.clone(),
         payload.birthday.clone(),
         payload.display_name.clone(),
         payload.avatar_url.clone(),
-        &state.db_pool
+        &state.db_pool,
     ).await {
-        Ok(_) => return (StatusCode::CREATED, Json(json!({"token" : token_str}))),
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Failed to create user: {e}" )})));
-        }
+        tracing::warn!("User created in DB but failed to add to cache: {}", e);
     }
+    
+    (StatusCode::CREATED, Json(json!({ "token": token_str })))
 }
 
 pub async fn request_code_handler(
@@ -106,18 +133,44 @@ pub async fn verify_code_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VerifyCodeRequest>
 ) -> impl IntoResponse {
-    if let Err(errors) = payload.validate() {
+        if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
 
-    if state.verification_store.lock().await.verify(&payload.email, &payload.code) {
-        if let Some(_) = state.user_store.lock().await.get_user_by_email(&payload.email) {
-            return (StatusCode::OK, Json(json!({ "isNewUser": false, "token" : "" })));
-        } else {
-            return (StatusCode::OK, Json(json!({ "isNewUser": true, "tempToken" : ""  })));
-        }
+    if !state.verification_store.lock().await.verify(&payload.email, &payload.code) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid or expired code" })));
     }
-    (StatusCode::BAD_GATEWAY, Json(json!({ "error": "Verification failed" })))
+
+    let user = match find_user_by_email(&state.db_pool, &payload.email).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (StatusCode::OK, Json(json!({ "isNewUser": true })));
+        }
+        Err(e) => {
+            tracing::error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+        }
+    };
+
+    let token = match find_token_by_user_id(&state.db_pool, user.id).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            let new_token = uuid::Uuid::new_v4().to_string();
+            let expires_at = Utc::now() + chrono::Duration::days(30);
+            
+            if let Err(e) = create_token(&state.db_pool, user.id, &new_token, expires_at).await {
+                tracing::error!("Failed to create token: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to create session" })));
+            }
+            new_token
+        }
+        Err(e) => {
+            tracing::error!("Failed to find token: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+        }
+    };
+
+    (StatusCode::OK, Json(json!({ "isNewUser": false, "token": token })))
 }
 
 pub async fn token_validate_handler(
@@ -140,20 +193,32 @@ pub async fn username_check_handler(
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }
-    let exists = state.user_store.lock().await.check_username(&payload.username);
-    (StatusCode::OK, Json(json!({"available": !exists})))
+
+    let exists: bool = match find_user_by_username(&state.db_pool, &payload.username).await {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
+        Err(e) => {
+            error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": format!("Database error: {}", e) })));
+        }
+    };
+
+    (StatusCode::OK, Json(json!({ "available": !exists })))
 }
 
 //test
 #[tokio::test]//registretion check
 async fn test_register_handler() {
-    use tower::ServiceExt;
+    let pool = setup_test_db().await;
+
+    sqlx::query!("DELETE FROM tokenstore").execute(&pool).await.unwrap();
+    sqlx::query!("DELETE FROM users").execute(&pool).await.unwrap();
 
     let state = Arc::new(AppState {
         tx: broadcast::channel(10).0,
         user_store: Arc::new(Mutex::new(UserStore::new())),
         verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: PgPool::connect("postgres://user:password@localhost/test_db").await.unwrap()
+        db_pool: pool
     });
 
     let app = Router::new()
@@ -164,7 +229,7 @@ async fn test_register_handler() {
         "username": "testuser",
         "email": "test@mail.com",
         "birthday": null,
-        "name": "Test",
+        "display_name": "Test",
         "avatar_url": null
     });
 

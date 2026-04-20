@@ -36,7 +36,6 @@ pub async fn user_edit_handler(
 
     let token = auth.token();
     
-    // 1. Находим пользователя по токену
     let user = match find_user_by_token(&state.db_pool, token).await {
         Ok(Some(user)) => user,
         Ok(None) => {
@@ -48,7 +47,6 @@ pub async fn user_edit_handler(
         }
     };
     
-    // 2. Обновляем пользователя в БД
     if let Err(e) = edit_user_db(
         &state.db_pool,
         user.id,

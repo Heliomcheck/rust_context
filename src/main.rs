@@ -19,6 +19,7 @@ pub(crate) mod secrets;
 pub(crate) mod models;
 pub(crate) mod handlers;
 pub(crate) mod data_base;
+pub(crate) mod test_utils;
 
 use structs::*;
 use context::*;
@@ -78,8 +79,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
-    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {temp_token: "", is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
-    // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}, temp_token: ""} -> if data.valid -> {token: ""} else {error: "reason"}
+    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
+    // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {token: ""} else {error: "reason"}
     // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}

@@ -11,7 +11,7 @@ impl Generator {
     }
     
     pub fn new_session_token() -> String {  // for user sessions
-        Uuid::new_v4().to_string()
+        Uuid::new_v4().to_string().replace("-", "")
     }
     
     pub fn api_token() -> String {          // for integration with external services

@@ -11,7 +11,7 @@ use crate::models::EditUserRequest;
 
 use crate::secrets::*;
 use crate::data_base::user_db::*;
-
+use crate::test_utils::*;
 pub struct UserStore { // In-memory user store
     pub users: HashMap<i64, User>,           // id -> User
     pub users_by_email: HashMap<String, i64>, // email -> id
@@ -28,7 +28,8 @@ impl UserStore {
     }
 
     pub async fn add_user( // add user from database (IN FUTURE) p.s. future is coming ;)
-            &mut self, 
+            &mut self,
+            user_id: i64, 
             username: String, 
             email: String,
             birthday: Option<String>,
@@ -45,8 +46,6 @@ impl UserStore {
             return Err(anyhow::anyhow!("Username already exists"));
         }
 
-        let user_id = create_user_db(pool, &username, &email, &name, &birthday, &avatar_url).await?;
-        
         let user = User::create(user_id, username.clone(),
             email.clone(), birthday.clone(), name.clone(), avatar_url.clone()
         );
@@ -97,13 +96,10 @@ fn test_new(){
 
 #[tokio::test]
 async fn test_add_user() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-
     let mut store = UserStore::new();
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
     let user_id = store.add_user(
+        10,
         "test".to_string(),
         "test@example.com".to_string(),
         None,
@@ -118,13 +114,10 @@ async fn test_add_user() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_get_user_by_email() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-
     let mut store = UserStore::new();
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
     let _ = store.add_user(
+        10,
         "test".to_string(),
         "test@example.com".to_string(),
         None, 
@@ -139,13 +132,10 @@ async fn test_get_user_by_email() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_get_user_by_id() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
-
+    let pool = setup_test_db().await;
     let mut store = UserStore::new();
     let user_id = store.add_user(
+        10,
         "test".to_string(),
         "test@example.com".to_string(),
         None,
@@ -160,34 +150,33 @@ async fn test_get_user_by_id() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_get_user_by_username() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
-    let mut store = UserStore::new();
-    let _ = store.add_user(
-        "test".to_string(), 
-        "test@example.com".to_string(), 
-        None, 
-        "Test User".to_string(),
-        None,
-        &pool
-    ).await?;
-    let user = store.get_user_by_username("test");
+    let user_id = create_user_db(
+        &pool,
+        "testuser",
+        "test@example.com",
+        "Test User",
+        &None,
+        &None,
+    )
+    .await?;
+
+    // Ищем пользователя через БД
+    let user = find_user_by_username(&pool, "testuser").await?;
     assert!(user.is_some());
+    assert_eq!(user.unwrap().username, "testuser");
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     store.add_user(//With your feet in the air and your head on the ground
+        10,
         "test".to_string(),//Try this trick and spin it, yeah
         "test@mail.ru".to_string(),//Your head will collapse
         None,//But there's nothing in it
@@ -215,13 +204,11 @@ async fn test_check_username_empty() -> anyhow::Result<()> { //pusto
 }
 #[tokio::test]
 async fn test_check_username_spaces() -> anyhow::Result<()> { //probelli ebanya rot
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     store.add_user(
+        10,
         "test nmae".to_string(),
         "test@mail.ru".to_string(),
         None,
@@ -235,13 +222,11 @@ async fn test_check_username_spaces() -> anyhow::Result<()> { //probelli ebanya 
 }
 #[tokio::test]
 async fn test_check_username_register() -> anyhow::Result<()> { //register (T != t)
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     store.add_user(
+        10,
         "testName".to_string(),
         "test@mail.ru".to_string(),
         None,
@@ -255,14 +240,12 @@ async fn test_check_username_register() -> anyhow::Result<()> { //register (T !=
 }
 #[tokio::test]
 async fn test_check_username_long() -> anyhow::Result<()> { //dlinno nemnozhko
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     let long_username = "sigmaboy".repeat(1000);
     store.add_user(
+        10,
         long_username.clone(),
         "test@mail.ru".to_string(),
         None,
@@ -277,14 +260,12 @@ async fn test_check_username_long() -> anyhow::Result<()> { //dlinno nemnozhko
 
 #[tokio::test]
 async fn test_check_username_special_chars() -> anyhow::Result<()> { //special simvoll's
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     let username = "sigmaboy_123!@#";
     store.add_user(
+        10,
         username.to_string(),
         "test@mail.ru".to_string(),
         None,
@@ -299,14 +280,12 @@ async fn test_check_username_special_chars() -> anyhow::Result<()> { //special s
 
 #[tokio::test]
 async fn test_check_username_unicode() -> anyhow::Result<()> { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
-    let pool = create_pool(&database_url).await?;
+    let pool = setup_test_db().await;
 
     let mut store = UserStore::new();
     let username = "Валерыч";
     store.add_user(
+        10,
         username.to_string(),
         "test@mail.ru".to_string(),
         None,
