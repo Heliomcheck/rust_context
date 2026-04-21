@@ -37,8 +37,9 @@ use crate::test_utils::*;
 
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterRequest>,
+    Json(wrapper): Json<RegisterRequestWrapper>,
 ) -> impl IntoResponse {
+    let payload = wrapper.user;
     if let Err(errors) = payload.validate() {
         return validation_errors_to_response(errors);
     }

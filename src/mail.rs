@@ -28,7 +28,7 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
     
     let mut store = state.verification_store.lock().await;
 
-    if !store.can_resend(to_mail, 60) {  // cooldown 60 сек
+    if !store.can_resend(to_mail, 30) {  // cooldown 30 сек
         return Err(anyhow::anyhow!("Too many requests. Wait before retry"));
     }
 

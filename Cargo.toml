@@ -20,10 +20,12 @@ hex = "0.4"
 axum-macros = "0.5.0"
 validator = { version = "0.16", features = ["derive"] }
 tower = { version = "0.4", features = ["util"] }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.10", features = ["typed-header", "multipart"] }
 headers = "0.4"
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
+multipart = "0.18.0"
+mime_guess = "2.0.5"

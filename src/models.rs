@@ -21,6 +21,11 @@ pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, J
     (StatusCode::BAD_REQUEST, Json(json!({ "errors": error_map })))
 }
 
+#[derive(Deserialize)]
+pub struct RegisterRequestWrapper {
+    pub user: RegisterRequest,
+}
+
 #[derive(Deserialize, Serialize, Validate)]
 pub struct RegisterRequest {
     #[validate(email(
@@ -85,6 +90,5 @@ pub struct UserDataResponse {
     pub username: String,
     pub email: String,
     pub name: String,
-    pub birthday: Option<String>,
-    pub avatar_url: Option<String>
+    pub birthday: Option<String>
 }

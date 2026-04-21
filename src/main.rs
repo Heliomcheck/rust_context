@@ -77,6 +77,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", routing::get(health_handler)) // delete in future
         //.route("/login", routing::get(sign_up_handler))
         .route("/user/get-data", routing::get(get_user_data_handler))
+
+        .route("/user/avatar", routing::post(upload_avatar_handler))
+        .route("/avatars/{file_name}", routing::get(get_avatar_handler))
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
@@ -87,6 +90,8 @@ async fn main() -> Result<(), anyhow::Error> {
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
     // POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}
     // GET /user/get-data {token: ""} -> {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} or {error: "reason"}
+    // POST /user/avatar {token: ""} and avatar -> {"avatar_url" : "avatar_url"}
+    // GET /avatars/:avatar_uuid.jpg {"token": "token"} -> avatar through multipart
 
     // POST /user/avatar 
     // GET /avatars/{user_id}.(jpg, png, jpeg)

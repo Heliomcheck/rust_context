@@ -288,6 +288,28 @@ pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, anyhow::Error>
 
     Ok(result.rows_affected())
 }
+
+pub async fn update_user_avatar(
+    pool: &PgPool,
+    user_id: i64,
+    avatar_url: &str,
+) -> Result<(), anyhow::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE users
+        SET avatar_url = $1
+        WHERE id = $2
+        "#,
+        avatar_url,
+        user_id
+    )
+    .execute(pool)
+    .await
+    .context("Failed to update avatar")?;
+    
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::generator;
