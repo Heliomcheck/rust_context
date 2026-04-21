@@ -27,7 +27,12 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
     let to_mail_format = to_mail.parse::<Mailbox>().context("Error 'to_mail' (mail)")?;
     
     let mut store = state.verification_store.lock().await;
-    let code = store.create_default(&to_mail);
+
+    if !store.can_resend(to_mail, 60) {  // cooldown 60 сек
+        return Err(anyhow::anyhow!("Too many requests. Wait before retry"));
+    }
+
+    let code = store.create(to_mail, 15);
 
     let email = MessageBuilder::new()
         .from(username_format)
