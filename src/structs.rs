@@ -96,3 +96,46 @@ pub struct AppState {
     pub verification_store: Arc<Mutex<VerificationStore>>,
     pub db_pool: PgPool
 }
+//tets
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]// Проверяет корректное создание структуры пользователя
+    fn test_user_create() {
+        let user = User::create(
+            1,
+            "test".into(),
+            "test@mail.com".into(),
+            None,
+            "Test".into(),
+            None
+        );
+        assert_eq!(user.id, 1);
+        assert_eq!(user.username, "test");
+    }
+}
+
+#[test]// Проверяет, что edit обновляет только переданные поля
+fn test_user_edit() {
+    let mut user = User::create(
+        1,
+        "old".into(),
+        "old@mail.com".into(),
+        None,
+        "Old".into(),
+        None,
+    );
+    let payload = EditUserRequest {
+        token: "12345678901234567890123456789012".into(),
+        username: Some("new".into()),
+        email: None,
+        birthday: None,
+        display_name: Some("New Name".into()),
+        avatar_url: None,
+    };
+    user.edit(payload);
+    assert_eq!(user.username, "new");
+    assert_eq!(user.name, "New Name");
+    assert_eq!(user.email, "old@mail.com");
+}

@@ -33,3 +33,26 @@ impl TokenStore {
         self.token == input_token
     }
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]// Проверяет, что токен считается просроченным при отрицательном TTL
+    fn test_token_expired() {
+        let token = TokenStore::new(1, -1);
+        assert!(token.is_expired());
+    }
+
+    #[test]// Проверяет, что токен валиден, если строка совпадает и он не просрочен
+    fn test_token_valid() {
+        let token = TokenStore::new(1, 1);
+        assert!(token.is_valid(&token.token));
+    }
+
+    #[test]// Проверяет, что неверная строка токена не проходит валидацию
+    fn test_token_invalid_string() {
+        let token = TokenStore::new(1, 1);
+        assert!(!token.is_valid("wrong_token"));
+    }
+}

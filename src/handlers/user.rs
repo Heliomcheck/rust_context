@@ -222,3 +222,86 @@ pub async fn get_avatar_handler(
         }
     }
 }
+#[tokio::test]// Проверяет, что запрос без валидного токена возвращает UNAUTHORIZED
+async fn test_get_user_data_handler_unauthorized() {
+    let pool = setup_test_db().await;
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool
+    });
+    let app = Router::new()
+        .route("/user/get-data", routing::get(get_user_data_handler))
+        .with_state(state);
+    let request = Request::builder()
+        .method("GET")
+        .uri("/user/get-data")
+        .header("Authorization", "Bearer invalid")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+#[tokio::test]// Проверяет, что редактирование пользователя без валидного токена запрещено
+async fn test_user_edit_handler_unauthorized() {
+    let pool = setup_test_db().await;
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool
+    });
+    let app = Router::new()
+        .route("/user/edit", routing::post(user_edit_handler))
+        .with_state(state);
+    let payload = json!({
+        "username": "newname"
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/user/edit")
+        .header("Authorization", "Bearer invalid")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]// Проверяет успешное получение данных пользователя по токену
+async fn test_get_user_data_success() {
+    let pool = setup_test_db().await;
+    let user_id = create_user_db(
+        &pool,
+        "user1",
+        "user1@mail.com",
+        "User",
+        &None,
+        &None,
+    ).await.unwrap();
+    let token = "valid_token";
+    create_token(
+        &pool,
+        user_id,
+        token,
+        Utc::now() + chrono::Duration::hours(1),
+    ).await.unwrap();
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool,
+    });
+    let app = Router::new()
+        .route("/user/get-data", routing::get(get_user_data_handler))
+        .with_state(state);
+    let request = Request::builder()
+        .method("GET")
+        .uri("/user/get-data")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

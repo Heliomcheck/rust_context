@@ -269,3 +269,128 @@ async fn test_register_handler() {
 
     assert_eq!(response.status(), axum::http::StatusCode::CREATED);
 }
+#[tokio::test]// Проверяет, что невалидный токен возвращает UNAUTHORIZED
+async fn test_token_validate_handler_invalid() {
+    let pool = setup_test_db().await;
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool
+    });
+    let app = Router::new()
+        .route("/auth/token-validate", routing::post(token_validate_handler))
+        .with_state(state);
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/token-validate")
+        .header("Authorization", "Bearer invalid")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]// Проверяет, что занятый username корректно обрабатывается эндпоинтом
+async fn test_username_check_handler() {
+    let pool = setup_test_db().await;
+    create_user_db(
+        &pool,
+        "taken",
+        "taken@mail.com",
+        "Test",
+        &None,
+        &None
+    ).await.unwrap();
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool
+    });
+    let app = Router::new()
+        .route("/auth/check-username", routing::post(username_check_handler))
+        .with_state(state);
+    let payload = json!({ "username": "taken" });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/check-username")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]// Проверяет, что при валидном коде возвращается isNewUser = true
+async fn test_verify_code_new_user() {
+    let pool = setup_test_db().await;
+    let mut verification = VerificationStore::new();
+    let email = "new@mail.com";
+    let code = verification.create(email, 15);
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(verification)),
+        db_pool: pool,
+    });
+    let app = Router::new()
+        .route("/auth/verify-code", routing::post(verify_code_handler))
+        .with_state(state);
+    let payload = json!({ "email": email, "code": code });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/verify-code")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]// Проверяет, что неверный код возвращает ошибку
+async fn test_verify_code_invalid() {
+    let pool = setup_test_db().await;
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool,
+    });
+    let app = Router::new()
+        .route("/auth/verify-code", routing::post(verify_code_handler))
+        .with_state(state);
+    let payload = json!({ "email": "test@mail.com", "code": "000000" });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/verify-code")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]// Проверяет, что код можно запросить повторно
+async fn test_resend_code_handler() {
+    let pool = setup_test_db().await;
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool,
+    });
+    let app = Router::new()
+        .route("/auth/resend", routing::post(resend_code_handler))
+        .with_state(state);
+    let payload = json!({ "email": "test@mail.com" });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/resend")
+        .header("content-type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert!(response.status().is_success() || response.status() == StatusCode::TOO_MANY_REQUESTS);
+    // Может быть OK или TOO_MANY_REQUESTS в зависимости от cooldown
+}

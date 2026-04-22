@@ -678,3 +678,24 @@ mod tests {
         Ok(())
     }
 }
+
+#[tokio::test]// Проверяет обновление avatar_url в базе
+async fn test_update_user_avatar() {
+    let pool = setup_test_db().await;
+    let user_id = create_user_db(
+        &pool,
+        "avatar_user",
+        "avatar@mail.com",
+        "User",
+        &None,
+        &None,
+    ).await.unwrap();
+    update_user_avatar(&pool, user_id, "/avatar/test.jpg")
+        .await
+        .unwrap();
+    let user = find_user_by_id(&pool, user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(user.avatar_url.unwrap(), "/avatar/test.jpg");
+}

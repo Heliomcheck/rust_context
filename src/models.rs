@@ -92,3 +92,16 @@ pub struct UserDataResponse {
     pub name: String,
     pub birthday: Option<String>
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]// Проверяет, что ошибки валидации корректно преобразуются в HTTP ответ
+    fn test_validation_error_response() {
+        let mut errors = ValidationErrors::new();
+        errors.add("email", validator::ValidationError::new("invalid"));
+        let (status, body) = validation_errors_to_response(errors);
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
