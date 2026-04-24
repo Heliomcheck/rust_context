@@ -28,38 +28,9 @@ pub struct ChatMessage {
 //     pub subgroups: Option<Vec<String>>
 // }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Event {
-    pub event_name: String,
-    pub start_data: Option<DateTime<Utc>>,
-    pub end_data: Option<DateTime<Utc>>,
-    pub event_id: i64,
-    pub event_avatar: Option<String>, // make access through event_id
-    pub descripion: Option<String>
-}
-
-pub struct EventToken {
-    pub event_token: String,
-    pub expires_ad: DateTime<Utc>,
-    pub create_ad: DateTime<Utc>,
-    pub event_id: i64
-}
-
-pub struct EventUsers {
-    pub user_id: i64, 
-    pub event_id: i64,
-    pub role: RoleInEvent,
-    pub entry_date: DateTime<Utc>
-}
- 
-enum RoleInEvent {
-    Master,
-    Slave
-}
-
 #[derive(Debug, Clone, FromRow)]
 pub struct User {
-    pub id: i64,
+    pub user_id: i64,
     pub name: String,
     pub username: String,
     pub email: String,
@@ -86,10 +57,10 @@ impl User {
             username: username,
             email: email,
             birthday: birthday,      // Set default birthday if not provided
-            id: user_id,
+            user_id: user_id,
+            descripion: descripion,
             name: name,
             avatar_url: avatar_url,
-            descripion: descripion,
 
             is_deleted: false,
             created_at: Utc::now(),
@@ -101,7 +72,7 @@ impl User {
             self.username = payload.username.unwrap_or(self.username.clone());
             self.email = payload.email.unwrap_or(self.email.clone());
             self.birthday = payload.birthday.or(self.birthday.clone());    // Keep existing birthday if not provided
-            self.id = self.id;
+            self.user_id = self.user_id;
             self.name = payload.display_name.unwrap_or(self.name.clone());
             self.avatar_url = payload.avatar_url.or(self.avatar_url.clone());
 

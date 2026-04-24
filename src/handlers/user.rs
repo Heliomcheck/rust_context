@@ -60,7 +60,7 @@ pub async fn user_edit_handler(
     
     if let Err(e) = edit_user_db(
         &state.db_pool,
-        user.id,
+        user.user_id,
         payload.username.as_deref(),
         payload.email.as_deref(),
         payload.display_name.as_deref(),
@@ -95,7 +95,7 @@ pub async fn get_user_data_handler(
     
     // 2. Формируем ответ
     let response = UserDataResponse {
-        id: user.id,
+        id: user.user_id,
         username: user.username.clone(),  // ← clone()
         email: user.email.clone(),        // ← clone()
         name: user.name.clone(),          // ← clone()
@@ -119,7 +119,7 @@ pub async fn upload_avatar_handler(
 ) -> impl IntoResponse {
     let token = auth.token();
     
-    let user = match find_user_by_token(&state.db_pool, token).await { // find user
+    let user = match find_user_by_token(&state.db_pool, token).await {
         Ok(Some(u)) => u,
         Ok(None) => return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid token" }))),
         Err(e) => {
@@ -128,7 +128,7 @@ pub async fn upload_avatar_handler(
         }
     };
     
-    while let Ok(Some(field)) = multipart.next_field().await { // avatar download
+    while let Ok(Some(field)) = multipart.next_field().await {
         if field.name() != Some("avatar") {
             continue;
         }
@@ -151,67 +151,68 @@ pub async fn upload_avatar_handler(
             }
         };
         
-        let new_name = format!("{}.{}", generator::Generator::new_session_token(), ext); // generate name avatar
-        let save_path = PathBuf::from(UPLOAD_DIR).join(&new_name); // sate in path
+        let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user.user_id)); // create user dir
         
-        if let Err(e) = fs::create_dir_all(UPLOAD_DIR).await {
-            error!("Failed to create upload dir: {}", e);
+        if let Err(e) = fs::create_dir_all(&user_dir).await {
+            error!("Failed to create user dir: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error" })));
         }
+        
+        let old_avatar_path = user_dir.join("avatar.*"); // delete old avatar
+        if let Ok(mut entries) = fs::read_dir(&user_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let name = entry.file_name();
+                if name.to_string_lossy().starts_with("avatar.") {
+                    let _ = fs::remove_file(entry.path()).await;
+                }
+            }
+        }
+        
+        let new_name = format!("avatar.{}", ext); // save new avatar
+        let save_path = user_dir.join(&new_name);
         
         if let Err(e) = fs::write(&save_path, data).await {
             error!("Failed to save file: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to save file" })));
         }
         
-        let avatar_url = format!("/avatars/{}", new_name);
-        if let Err(e) = update_user_avatar(&state.db_pool, user.id, &avatar_url).await {
+        // Обновляем avatar_url в БД
+        let avatar_url = format!("/user/avatar");
+        if let Err(e) = update_user_avatar(&state.db_pool, user.user_id, &avatar_url).await {
             error!("Failed to update avatar URL: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to update avatar" })));
         }
         
-        return (StatusCode::OK, Json(json!({"success" : true, "avatar_url": avatar_url })));
+        return (StatusCode::OK, Json(json!({ "success": true, "avatar_url": avatar_url })));
     }
     
     (StatusCode::BAD_REQUEST, Json(json!({ "error": "No file provided" })))
 }
 
 pub async fn get_avatar_handler(
-    Path(file_name): Path<String>,
-    auth: TypedHeader<Authorization<Bearer>>,
-    State(state): State<Arc<AppState>>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let token = auth.token();
+    let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
     
-    let user = match find_user_by_token(&state.db_pool, token).await { // check token
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (StatusCode::UNAUTHORIZED, "Invalid or expired token").into_response();
+    if !user_dir.exists() {
+        return (StatusCode::NOT_FOUND, "Avatar not found").into_response();
+    }
+    
+    let mut avatar_path = None; // find avatar.*
+    if let Ok(mut entries) = fs::read_dir(&user_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("avatar.") {
+                avatar_path = Some(entry.path());
+                break;
+            }
         }
-        Err(e) => {
-            error!("DB error: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
-        }
+    }
+    
+    let path = match avatar_path {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Avatar not found").into_response(),
     };
-    
-    let expected_avatar = format!("/avatars/{}", file_name);
-    
-    match user.avatar_url {
-        Some(url) if url == expected_avatar => { // user owner avatar
-        }
-        Some(_) => {
-            return (StatusCode::FORBIDDEN, "You can only access your own avatar").into_response();
-        }
-        None => {
-            return (StatusCode::NOT_FOUND, "Avatar not found").into_response();
-        }
-    }
-    
-    let path = PathBuf::from(UPLOAD_DIR).join(&file_name); // upload file
-    
-    if !path.exists() {
-        return (StatusCode::NOT_FOUND, "File not found").into_response();
-    }
     
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
     
@@ -285,6 +286,7 @@ async fn test_get_user_data_success() {
         "User",
         &None,
         &None,
+        &Some("test".to_string())
     ).await.unwrap();
     let token = "valid_token";
     create_token(

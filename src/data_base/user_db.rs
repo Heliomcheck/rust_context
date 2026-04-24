@@ -1,6 +1,5 @@
 use sqlx::postgres::{PgPoolOptions, PgPool};
 use anyhow::{Context, Ok};
-use crate::test_utils::*;
 
 use chrono::{DateTime, Utc};
 
@@ -25,24 +24,26 @@ pub async fn create_user_db(
     name: &str,
     birthday: &Option<String>,
     avatar_url: &Option<String>,
+    descripion: &Option<String>
 ) -> Result<i64, anyhow::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO users (username, email, name, birthday, avatar_url)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
+        INSERT INTO users (username, email, name, birthday, avatar_url, descripion)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING user_id
         "#, 
         username, 
         email, 
         name, 
         birthday.clone(), 
-        avatar_url.clone()
+        avatar_url.clone(),
+        descripion.clone()
     )
     .fetch_one(pool)
     .await
     .context("Failed to create user")?;
     
-    Ok(row.id)
+    Ok(row.user_id)
 }
 
 pub async fn edit_user_db(
@@ -117,10 +118,10 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at
+        SELECT user_id, username, email, name, birthday, avatar_url,
+               is_deleted, created_at, last_online_at, descripion
         FROM users
-        WHERE id = $1 AND is_deleted = false
+        WHERE user_id = $1 AND is_deleted = false
         "#,
         user_id
     )
@@ -138,8 +139,8 @@ pub async fn find_user_by_username(
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at
+        SELECT user_id, username, email, name, birthday, avatar_url,
+               is_deleted, created_at, last_online_at, descripion
         FROM users
         WHERE username = $1 AND is_deleted = false
         "#,
@@ -160,7 +161,7 @@ pub async fn create_token(
 ) -> Result<(), anyhow::Error> {
     sqlx::query!(
         r#"
-        INSERT INTO tokenstore (user_id, token, expires_at, is_active)
+        INSERT INTO token_store (user_id, token, expires_at, is_active)
         VALUES ($1, $2, $3, true)
         "#,
         user_id,
@@ -178,10 +179,10 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, anyhow::
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT u.id, u.username, u.email, u.name, u.birthday, u.avatar_url,
-               u.is_deleted, u.created_at, u.last_online_at
+        SELECT u.user_id, u.username, u.email, u.name, u.birthday, u.avatar_url,
+               u.is_deleted, u.created_at, u.last_online_at, descripion
         FROM users u
-        JOIN tokenstore t ON u.id = t.user_id
+        JOIN token_store t ON u.user_id = t.user_id
         WHERE t.token = $1 
           AND t.is_active = true 
           AND t.expires_at > NOW()
@@ -199,7 +200,7 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, anyhow::
 pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), anyhow::Error> {
     sqlx::query!(
         r#"
-        UPDATE tokenstore
+        UPDATE token_store
         SET is_active = false
         WHERE token = $1
         "#,
@@ -215,7 +216,7 @@ pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), anyhow::
 pub async fn deactivate_all_user_tokens(pool: &PgPool, user_id: i64) -> Result<(), anyhow::Error> {
     sqlx::query!(
         r#"
-        UPDATE tokenstore
+        UPDATE token_store
         SET is_active = false
         WHERE user_id = $1 AND is_active = true
         "#,
@@ -232,7 +233,7 @@ pub async fn find_token_by_user_id(pool: &PgPool, user_id: i64) -> Result<Option
     let row = sqlx::query!(
         r#"
         SELECT token
-        FROM tokenstore
+        FROM token_store
         WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
         ORDER BY created_at DESC
         LIMIT 1
@@ -256,7 +257,7 @@ pub async fn refresh_token(
     
     let row = sqlx::query!(
         r#"
-        SELECT user_id FROM tokenstore
+        SELECT user_id FROM token_store
         WHERE token = $1
         "#, 
         old_token
@@ -278,7 +279,7 @@ pub async fn refresh_token(
 pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, anyhow::Error> {
     let result = sqlx::query!(
         r#"
-        DELETE FROM tokenstore
+        DELETE FROM token_store
         WHERE expires_at <= NOW() OR is_active = false
         "#
     )
@@ -298,7 +299,7 @@ pub async fn update_user_avatar(
         r#"
         UPDATE users
         SET avatar_url = $1
-        WHERE id = $2
+        WHERE user_id = $2
         "#,
         avatar_url,
         user_id
@@ -310,12 +311,31 @@ pub async fn update_user_avatar(
     Ok(())
 }
 
+pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, anyhow::Error> { // non tested
+    let users = sqlx::query_as!(
+        User,
+        r#"
+        SELECT user_id, username, email, name, birthday, avatar_url,
+               is_deleted, created_at, last_online_at, descripion
+        FROM users
+        WHERE is_deleted = false
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .context("Failed to load users from database")?;
+    
+    Ok(users)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::generator;
 
     use super::*;
     use chrono::Utc;
+
+    use crate::test_utils::*;
 
     #[tokio::test]
     async fn test_create_user_db() {
@@ -327,6 +347,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -344,6 +365,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -362,6 +384,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -394,6 +417,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -420,6 +444,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -434,7 +459,7 @@ mod tests {
         .unwrap();
         let user = find_user_by_token(&pool, token).await.unwrap();
         assert!(user.is_some());
-        assert_eq!(user.unwrap().id, user_id);
+        assert_eq!(user.unwrap().user_id, user_id);
     }
 
     #[tokio::test]
@@ -448,6 +473,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -475,6 +501,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -499,12 +526,13 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
         let user = find_user_by_id(&pool, user_id).await.unwrap();
         assert!(user.is_some());
-        assert_eq!(user.unwrap().id, user_id);
+        assert_eq!(user.unwrap().user_id, user_id);
     }
 
     #[tokio::test]
@@ -518,6 +546,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -536,6 +565,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -574,6 +604,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -603,6 +634,7 @@ mod tests {
             "Test",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -650,6 +682,7 @@ mod tests {
             "Token User",
             &None,
             &None,
+            &Some("test".to_string())
         )
         .await?;
         
@@ -661,7 +694,7 @@ mod tests {
         let row = sqlx::query!(
             r#"
             SELECT user_id, token, is_active, expires_at
-            FROM tokenstore
+            FROM token_store
             WHERE token = $1
             "#,
             token

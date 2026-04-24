@@ -70,6 +70,7 @@ pub async fn register_handler(
         &payload.display_name,
         &payload.birthday,
         &avatar_url,
+        &payload.description
     ).await {
         Ok(id) => id,
         Err(e) => {
@@ -100,6 +101,7 @@ pub async fn register_handler(
         payload.birthday.clone(),
         payload.display_name.clone(),
         avatar_url.clone(),
+        payload.description.clone(),
         &state.db_pool,
     ).await {
         tracing::warn!("User created in DB but failed to add to cache: {}", e);
@@ -150,13 +152,13 @@ pub async fn verify_code_handler(
         }
     };
 
-    let token = match find_token_by_user_id(&state.db_pool, user.id).await {
+    let token = match find_token_by_user_id(&state.db_pool, user.user_id).await {
         Ok(Some(t)) => t,
         Ok(None) => {
             let new_token = uuid::Uuid::new_v4().to_string();
             let expires_at = Utc::now() + chrono::Duration::days(30);
             
-            if let Err(e) = create_token(&state.db_pool, user.id, &new_token, expires_at).await {
+            if let Err(e) = create_token(&state.db_pool, user.user_id, &new_token, expires_at).await {
                 tracing::error!("Failed to create token: {}", e);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to create session" })));
             }
@@ -237,7 +239,7 @@ pub async fn logout_handler(
         Ok(Some(user)) => {
             match deactivate_token(&state.db_pool, token).await {
                 Ok(_) => {
-                    tracing::info!("User {} logged out", user.id);
+                    tracing::info!("User {} logged out", user.user_id);
                     (StatusCode::OK, Json(json!({ "success": true })))
                 }
                 Err(e) => {
@@ -261,7 +263,7 @@ pub async fn logout_handler(
 async fn test_register_handler() {
     let pool = setup_test_db().await;
 
-    sqlx::query!("DELETE FROM tokenstore").execute(&pool).await.unwrap();
+    sqlx::query!("DELETE FROM token_store").execute(&pool).await.unwrap();
     sqlx::query!("DELETE FROM users").execute(&pool).await.unwrap();
 
     let state = Arc::new(AppState {
@@ -327,7 +329,8 @@ async fn test_username_check_handler() {
         "taken@mail.com",
         "Test",
         &None,
-        &None
+        &None,
+        &Some("test".to_string())
     ).await.unwrap();
     let state = Arc::new(AppState {
         tx: broadcast::channel(10).0,

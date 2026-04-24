@@ -34,6 +34,7 @@ impl UserStore {
             birthday: Option<String>,
             name: String,
             avatar_url: Option<String>,
+            description: Option<String>,
             _: &PgPool
         ) -> Result<i64, anyhow::Error> {
 
@@ -46,7 +47,7 @@ impl UserStore {
         }
 
         let user = User::create(user_id, username.clone(),
-            email.clone(), birthday.clone(), name.clone(), avatar_url.clone()
+            email.clone(), birthday.clone(), name.clone(), avatar_url.clone(), description.clone()
         );
 
         self.users.insert(user_id, user);
@@ -104,6 +105,7 @@ async fn test_add_user() -> anyhow::Result<()> {
         None,
         "Test User".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     );
     assert!(user_id.await.is_ok());
@@ -122,6 +124,7 @@ async fn test_get_user_by_email() -> anyhow::Result<()> {
         None, 
         "Test User".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let user = store.get_user_by_email("test@example.com");
@@ -140,6 +143,7 @@ async fn test_get_user_by_id() -> anyhow::Result<()> {
         None,
         "Test User".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let user = store.get_user_by_id(user_id);
@@ -158,6 +162,7 @@ async fn test_get_user_by_username() -> anyhow::Result<()> {
         "Test User",
         &None,
         &None,
+        &Some("test".to_string())
     )
     .await?;
 
@@ -181,6 +186,7 @@ async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
         None,//But there's nothing in it
         "Tets name".to_string(),//And you'll ask yourself
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username("test");
@@ -213,6 +219,7 @@ async fn test_check_username_spaces() -> anyhow::Result<()> { //probelli ebanya 
         None,
         "Tets name".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username("test nmae");
@@ -231,6 +238,7 @@ async fn test_check_username_register() -> anyhow::Result<()> { //register (T !=
         None,
         "Tets Name".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username("testname");
@@ -250,6 +258,7 @@ async fn test_check_username_long() -> anyhow::Result<()> { //dlinno nemnozhko
         None,
         "Tets name".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username(&long_username);
@@ -270,6 +279,7 @@ async fn test_check_username_special_chars() -> anyhow::Result<()> { //special s
         None,
         "Tets name".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username("username");
@@ -290,6 +300,7 @@ async fn test_check_username_unicode() -> anyhow::Result<()> { //Unicode test na
         None,
         "Tets name".to_string(),
         None,
+        Some("test".to_string()),
         &pool
     ).await?;
     let exists = store.check_username("username");

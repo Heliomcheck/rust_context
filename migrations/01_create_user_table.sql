@@ -1,8 +1,9 @@
 CREATE TABLE IF NOT EXISTS users (
-    id BIGSERIAL PRIMARY KEY,
+    user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
+    descripion TEXT,
     birthday TEXT,
     avatar_url TEXT,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,

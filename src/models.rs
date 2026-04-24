@@ -39,7 +39,10 @@ pub struct RegisterRequest {
     pub birthday: Option<String>,
     #[validate(length(min = 1, max = 100,
         message = "Display name cannot be empty"))]
-    pub display_name: String
+    pub display_name: String,
+    #[validate(length(max = 100, 
+        message = "Description length can't be more than 100 characters"))]
+    pub description: Option<String>
 }
 
 #[derive(Deserialize, Serialize, Validate)]
