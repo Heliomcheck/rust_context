@@ -29,3 +29,20 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
 multipart = "0.18.0"
 mime_guess = "2.0.5"
+
+
+# [profile.dev]
+# rustflags = ["-A", "warnings"]
+
+# [profile.release]
+# rustflags = ["-A", "warnings"]
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 0
+debug = true
+lto = false
+codegen-units = 1

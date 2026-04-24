@@ -65,37 +65,38 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .route("/auth/request-code", routing::post(request_code_handler))
         .route("/auth/verify-code", routing::post(verify_code_handler))
+        .route( "/auth/resend-code", routing::post(resend_code_handler))
         .route("/auth/register", routing::post(register_handler))
         .route("/auth/token-validate", routing::post(token_validate_handler))
-        //.route("/auth/logout", routing::post(logout_handler)) 
+        .route("/auth/logout", routing::post(logout_handler)) 
         .route("/auth/check-username", routing::post(username_check_handler))
 
         .route("/user/edit", routing::post(user_edit_handler))
-        //.route("/user/stay-online", routing::post(stay_online_handler))
+        .route("/user/get-data", routing::get(get_user_data_handler)) // user_id
+        .route("/user/avatar", routing::post(upload_avatar_handler))
 
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
-        //.route("/login", routing::get(sign_up_handler))
-        .route("/user/get-data", routing::get(get_user_data_handler))
-
-        .route("/user/avatar", routing::post(upload_avatar_handler))
+        
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
+    // OK POST /auth/resend-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
     // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
     // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {token: ""} else {error: "reason"}
     // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
-    // POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}
-    // GET /user/get-data {token: ""} -> {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} or {error: "reason"}
-    // POST /user/avatar {token: ""} and avatar -> {"avatar_url" : "avatar_url"}
-    // GET /avatars/:avatar_uuid.jpg {"token": "token"} -> avatar through multipart
+    // OK POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}
+    // OK GET /user/get-data {token: ""} -> {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} or {error: "reason"}
+    // OK POST /user/avatar {token: ""} and avatar -> {"avatar_url" : "avatar_url"}
+    // OK GET /avatars/:avatar_uuid.jpg {"token": "token"} -> avatar through multipart
 
-    // POST /user/avatar 
-    // GET /avatars/{user_id}.(jpg, png, jpeg)
-    
+    // продумать аватарки под etag
+    // переделать функции под кэш
+    // 
+    // user_id добавить как отправку пользователю
     let listner = TcpListener::bind(args[1].as_str()).await
         .context("Can't bind to address")?;
 

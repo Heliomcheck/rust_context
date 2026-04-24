@@ -31,10 +31,30 @@ pub struct ChatMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub event_name: String,
-    pub data: Option<String>,
-    pub event_id: u64,
-    pub chat: ChatMessage,
-    pub list_user_ids: Option<Vec<u64>>
+    pub start_data: Option<DateTime<Utc>>,
+    pub end_data: Option<DateTime<Utc>>,
+    pub event_id: i64,
+    pub event_avatar: Option<String>, // make access through event_id
+    pub descripion: Option<String>
+}
+
+pub struct EventToken {
+    pub event_token: String,
+    pub expires_ad: DateTime<Utc>,
+    pub create_ad: DateTime<Utc>,
+    pub event_id: i64
+}
+
+pub struct EventUsers {
+    pub user_id: i64, 
+    pub event_id: i64,
+    pub role: RoleInEvent,
+    pub entry_date: DateTime<Utc>
+}
+ 
+enum RoleInEvent {
+    Master,
+    Slave
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -44,7 +64,8 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub birthday: Option<String>,
-    pub avatar_url: Option<String>,
+    pub avatar_url: Option<String>, // make access through user_id
+    pub descripion: Option<String>,
 
     pub is_deleted: bool,
     pub created_at: DateTime<Utc>,
@@ -58,7 +79,8 @@ impl User {
         email: String,
         birthday: Option<String>,
         name: String,
-        avatar_url: Option<String>
+        avatar_url: Option<String>,
+        descripion: Option<String>
     ) -> Self {
         User {
             username: username,
@@ -67,6 +89,7 @@ impl User {
             id: user_id,
             name: name,
             avatar_url: avatar_url,
+            descripion: descripion,
 
             is_deleted: false,
             created_at: Utc::now(),

@@ -122,7 +122,7 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
         FROM users
         WHERE id = $1 AND is_deleted = false
         "#,
-        user_id  // ← параметр передаётся сюда, а не через .bind()
+        user_id
     )
     .fetch_optional(pool) 
     .await
@@ -315,7 +315,6 @@ mod tests {
     use crate::generator;
 
     use super::*;
-    use sqlx::Executor;
     use chrono::Utc;
 
     #[tokio::test]

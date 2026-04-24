@@ -9,7 +9,6 @@ use sqlx::PgPool;
 use anyhow::Error;
 use crate::models::EditUserRequest;
 
-use crate::secrets::*;
 use crate::data_base::user_db::*;
 use crate::test_utils::*;
 pub struct UserStore { // In-memory user store
@@ -35,7 +34,7 @@ impl UserStore {
             birthday: Option<String>,
             name: String,
             avatar_url: Option<String>,
-            pool: &PgPool
+            _: &PgPool
         ) -> Result<i64, anyhow::Error> {
 
         if self.users_by_email.contains_key(&email) { // only in memory, in future check in database
@@ -152,7 +151,7 @@ async fn test_get_user_by_id() -> anyhow::Result<()> {
 async fn test_get_user_by_username() -> anyhow::Result<()> {
     let pool = setup_test_db().await;
 
-    let user_id = create_user_db(
+    let _ = create_user_db(
         &pool,
         "testuser",
         "test@example.com",
