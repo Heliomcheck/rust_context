@@ -25,7 +25,7 @@ use structs::*;
 use context::*;
 
 use crate::{
-    user::UserStore,
+    user::*,
     handlers::auth::*,
     handlers::user::*,
     secrets::token::TokenStore,
@@ -46,14 +46,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let database_url = std::env::var("DATABASE_URL")
         .context("DATABASE_URL not set")?;
 
-    let file_appender = rolling::daily("logs", "app.log");
-    let (non_blocking, _guard) = non_blocking(file_appender);
-    
-    tracing_subscriber::registry()
-        .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking)) 
-        .with(EnvFilter::from_default_env())
-        .init();
+    let _guard = setup_logging();
+
+    tracing::info!("Server started");
 
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
     let user_store = Arc::new(Mutex::new(UserStore::new()));
@@ -61,6 +56,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let db_pool = create_pool(&database_url.as_str()).await?;
 
     let state = Arc::new(AppState {tx, user_store, verification_store, db_pool});
+
+    {
+        let mut store = state.user_store.lock().await;
+        store.load_from_db(&state.db_pool).await.context("Error of loading db in cache")?;
+    }
 
     let app = Router::new()
         .route("/auth/request-code", routing::post(request_code_handler))
@@ -115,4 +115,17 @@ async fn websocket_handler(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
+}
+
+fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
+    let file_appender = rolling::daily("logs", "app.log");
+    let (non_blocking, guard) = non_blocking(file_appender);
+    
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(non_blocking))
+        .with(EnvFilter::from_default_env())
+        .init();
+    
+    guard  // ← возвращаем guard
 }

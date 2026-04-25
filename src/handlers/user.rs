@@ -25,6 +25,7 @@ use crate::test_utils::setup_test_db;
 use tower::ServiceExt;
 use axum::http::{Request, Response};
 use chrono::Utc;
+use axum::http::header::{self, HeaderMap};
 
 use crate::{data_base::user_db::find_user_by_token, generator, models::CheckUsernameRequest, secrets::token::{self, TokenStore}, structs::*};
 
@@ -190,8 +191,17 @@ pub async fn upload_avatar_handler(
 }
 
 pub async fn get_avatar_handler(
+    headers: HeaderMap,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
+    let current_etag = compute_avatar_etag(user_id).await.unwrap_or("\"\"".to_string()); // compute etag
+
+    if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) { // check 
+        if if_none_match.to_str().unwrap_or("") == current_etag {
+            return StatusCode::NOT_MODIFIED.into_response();
+        }
+    }
+
     let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
     
     if !user_dir.exists() {
@@ -227,6 +237,30 @@ pub async fn get_avatar_handler(
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response()
         }
     }
+}
+
+pub async fn compute_avatar_etag(user_id: i64) -> Result<String, std::io::Error> {
+    let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
+    
+    let mut avatar_path = None;
+    if let Ok(mut entries) = fs::read_dir(&user_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("avatar.") {
+                avatar_path = Some(entry.path());
+                break;
+            }
+        }
+    }
+    
+    let path = match avatar_path {
+        Some(p) => p,
+        None => return Ok("\"\"".to_string()),
+    };
+    
+    let data = fs::read(&path).await?;
+    let hash = blake3::hash(&data);
+    Ok(format!("\"{}\"", hash.to_hex()))
 }
 
 #[tokio::test]// Проверяет, что запрос без валидного токена возвращает UNAUTHORIZED

@@ -26,6 +26,24 @@ impl UserStore {
         }
     }
 
+    pub async fn load_from_db(&mut self, pool: &PgPool) -> Result<(), anyhow::Error> {
+        self.users.clear(); // clear old hash
+        self.users_by_email.clear();
+        self.users_by_username.clear();
+        
+        let users = load_all_users(pool).await?; // load users from db
+        
+        for user in users {
+            let user_id = user.user_id;
+            self.users.insert(user_id, user.clone());
+            self.users_by_email.insert(user.email.clone(), user_id);
+            self.users_by_username.insert(user.username.clone(), user_id);
+        }
+        
+        info!("Loaded {} users into cache", self.users.len());
+        Ok(())
+    }
+
     pub async fn add_user( // add user from database (IN FUTURE) p.s. future is coming ;)
             &mut self,
             user_id: i64, 
