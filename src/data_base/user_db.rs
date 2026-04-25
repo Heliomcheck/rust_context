@@ -53,7 +53,8 @@ pub async fn edit_user_db(
     email: Option<&str>,
     name: Option<&str>,
     birthday: Option<&str>,
-    avatar_url: Option<&str>
+    avatar_url: Option<&str>,
+    descripion: Option<&str>
 ) -> Result<(), anyhow::Error> {
     sqlx::query(
         r#"
@@ -62,8 +63,9 @@ pub async fn edit_user_db(
             email = COALESCE($2, email),
             name = COALESCE($3, name),
             birthday = COALESCE($4, birthday),
-            avatar_url = COALESCE($5, avatar_url)
-        WHERE id = $6
+            avatar_url = COALESCE($5, avatar_url),
+            descripion = COALESCE($6, descripion)
+        WHERE user_id = $7
         "#
     )
     .bind(username)
@@ -71,6 +73,7 @@ pub async fn edit_user_db(
     .bind(name)
     .bind(birthday)
     .bind(avatar_url)
+    .bind(descripion)
     .bind(user_id)
     .execute(pool)
     .await
@@ -79,19 +82,18 @@ pub async fn edit_user_db(
     Ok(())
 } // add delete user later, check later
 
-pub async fn find_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, anyhow::Error> {
+pub async fn find_user_by_email(pool: &PgPool, email: &str) -> anyhow::Result<Option<User>> {
     let user = sqlx::query_as::<_, User>(
         r#"
-        SELECT id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at
+        SELECT user_id, username, email, name, birthday, avatar_url,
+               is_deleted, created_at, last_online_at, descripion
         FROM users
         WHERE email = $1 AND is_deleted = false
         "#
     )
     .bind(email)
     .fetch_optional(pool)
-    .await
-    .context("Failed to find user by email")?;
+    .await?;
     
     Ok(user)
 }
@@ -99,10 +101,10 @@ pub async fn find_user_by_email(pool: &PgPool, email: &str) -> Result<Option<Use
 pub async fn find_user_by_token(pool: &PgPool, token: &str) -> Result<Option<User>, anyhow::Error> {
     let user = sqlx::query_as::<_, User>(
         r#"
-        SELECT u.id, u.username, u.email, u.name, u.birthday, u.avatar_url,
-               u.is_deleted, u.created_at, u.last_online_at
+        SELECT u.user_id, u.username, u.email, u.name, u.birthday, u.avatar_url,
+               u.is_deleted, u.created_at, u.last_online_at, descripion
         FROM users u
-        JOIN tokenstore t ON u.id = t.user_id
+        JOIN token_store t ON u.user_id = t.user_id
         WHERE t.token = $1 AND t.is_active = true AND t.expires_at > NOW()
         "#
     )
@@ -396,6 +398,7 @@ mod tests {
             Some("New Name"),
             None,
             None,
+            Some("test")
         )
         .await
         .unwrap();
@@ -446,17 +449,19 @@ mod tests {
             &None,
             &Some("test".to_string())
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
         let token = "find_token";
+
         create_token(
             &pool,
             user_id,
             token,
             Utc::now() + chrono::Duration::hours(1),
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
+
         let user = find_user_by_token(&pool, token).await.unwrap();
         assert!(user.is_some());
         assert_eq!(user.unwrap().user_id, user_id);
@@ -567,27 +572,30 @@ mod tests {
             &None,
             &Some("test".to_string())
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
+
         create_token(
             &pool,
             user_id,
             "token1",
             Utc::now() + chrono::Duration::hours(1),
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
+
         create_token(
             &pool,
             user_id,
             "token2",
             Utc::now() + chrono::Duration::hours(1),
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
         deactivate_all_user_tokens(&pool, user_id)
             .await
             .unwrap();
+
         let user = find_user_by_token(&pool, "token1").await.unwrap();
         assert!(user.is_none());
         let user = find_user_by_token(&pool, "token2").await.unwrap();

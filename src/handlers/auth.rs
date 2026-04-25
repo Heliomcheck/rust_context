@@ -46,8 +46,8 @@ pub async fn register_handler(
         }
         Ok(None) => {}
         Err(e) => {
-            // tracing::error!("DB error: {}", e);
-            // return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+            tracing::error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
         }
     }
     
@@ -57,8 +57,8 @@ pub async fn register_handler(
         }
         Ok(None) => {}
         Err(e) => {
-            // tracing::error!("DB error: {}", e);
-            // return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+            tracing::error!("DB error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
         }
     }
     let avatar_url = Some("test".to_string());

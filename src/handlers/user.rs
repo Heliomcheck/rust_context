@@ -66,7 +66,8 @@ pub async fn user_edit_handler(
         payload.email.as_deref(),
         payload.display_name.as_deref(),
         payload.birthday.as_deref(),
-        payload.avatar_url.as_deref()
+        payload.avatar_url.as_deref(),
+        payload.descripion.as_deref()
     ).await {
         tracing::error!("Failed to update user: {}", e);
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": "Failed to update user" })));

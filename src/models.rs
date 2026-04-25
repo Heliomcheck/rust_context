@@ -70,8 +70,6 @@ pub struct CheckUsernameRequest {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct EditUserRequest {
-    #[validate(length(min = 32, max = 32))]
-    pub token: String,
     #[validate(length(min = 5, max = 30,
         message = "Username length must be more than 4 characters"))]
     pub username: Option<String>,
@@ -84,7 +82,10 @@ pub struct EditUserRequest {
     #[validate(length(min = 1, max = 100,
         message = "Display name cannot be empty"))]
     pub display_name: Option<String>,
-    pub avatar_url: Option<String>
+    pub avatar_url: Option<String>,
+    #[validate(length(max = 100, 
+        message = "Description length can't be more than 100 characters"))]
+    pub descripion: Option<String>
 }
 
 #[derive(Debug, Serialize)]
