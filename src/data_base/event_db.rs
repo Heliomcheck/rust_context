@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use crate::errors::AppError;
 
 pub async fn create_event(
     pool: &PgPool,
@@ -8,7 +9,7 @@ pub async fn create_event(
     description: Option<&str>,
     start_date: Option<DateTime<Utc>>,
     end_date: Option<DateTime<Utc>>
-) -> Result<i64> {
+) -> Result<i64, AppError> {
     let row = sqlx::query!(
         r#"
         INSERT INTO events (event_name, description, start_date, end_date)
@@ -21,8 +22,7 @@ pub async fn create_event(
         end_date
     )
     .fetch_one(pool)
-    .await
-    .context("Failed to create event")?;
+    .await?;
 
     Ok(row.event_id)
 }
@@ -44,8 +44,16 @@ pub async fn get_event_by_id(
     .await
     .context("Failed to get event")?;
 
-    Ok(row.map(|r| (r.event_id, r.event_name, r.description, r.start_date, r.end_date, 
-                    r.is_active.unwrap_or(true), r.created_at.unwrap(), r.status_id)))
+   Ok((
+        r.event_id,
+        r.event_name,
+        r.description,
+        r.start_date,
+        r.end_date,
+        r.is_active.unwrap_or(true),
+        r.created_at.unwrap(),
+        r.status_id
+    ))
 }
 
 pub async fn get_user_events(
@@ -286,7 +294,8 @@ pub async fn get_event_id_by_token(
     .await
     .context("Failed to get event by token")?;
     
-    Ok(row.map(|r| r.event_id))
+    let r = row.ok_or(AppError::InvalidToken)?;
+    Ok(r.event_id)
 }
 
 pub async fn is_user_in_event(
