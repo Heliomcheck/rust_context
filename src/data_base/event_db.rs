@@ -309,3 +309,181 @@ pub async fn is_user_in_event(
     
     Ok(row.exists)
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::setup_test_db;
+    use crate::data_base::user_db::create_user_db;
+    use chrono::Utc;
+
+//EVENT
+    #[tokio::test]
+    async fn test_create_and_get_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event_id = create_event(
+            &pool,
+            "Test Event",
+            Some("Description"),
+            None,
+            None
+        ).await?;
+        let event = get_event_by_id(&pool, event_id).await?;
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert_eq!(event.1, "Test Event");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_event_not_found() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event = get_event_by_id(&pool, 9999).await?;
+        assert!(event.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event_id = create_event(&pool, "Old", None, None, None).await?;
+        update_event(
+            &pool,
+            event_id,
+            Some("New"),
+            Some("Updated"),
+            None,
+            None,
+            Some(false)
+        ).await?;
+        let event = get_event_by_id(&pool, event_id).await?.unwrap();
+        assert_eq!(event.1, "New");
+        assert_eq!(event.2.unwrap(), "Updated");
+        assert_eq!(event.5, false);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_event_status() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event_id = create_event(&pool, "Test", None, None, None).await?;
+        update_event_status(&pool, event_id, 2).await?;
+        let event = get_event_by_id(&pool, event_id).await?.unwrap();
+        assert_eq!(event.7, 2);
+        Ok(())
+    }
+
+//PARTICIPANTS
+
+    #[tokio::test]
+    async fn test_add_and_check_participant() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user = create_user_db(
+            &pool,
+            "user1",
+            "user1@mail.com",
+            "User One",
+            &None,
+            &None,
+            &None
+        ).await?.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        add_participant(&pool, user.user_id, event_id, 1, 1).await?;
+        let exists = is_user_in_event(&pool, user.user_id, event_id).await?;
+        assert!(exists);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_participant() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user = create_user_db(
+            &pool,
+            "user2",
+            "user2@mail.com",
+            "User Two",
+            &None,
+            &None,
+            &None
+        ).await?.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        add_participant(&pool, user.user_id, event_id, 1, 1).await?;
+        remove_participant(&pool, user.user_id, event_id).await?;
+        let exists = is_user_in_event(&pool, user.user_id, event_id).await?;
+        assert!(!exists);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_participant_role() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user = create_user_db(
+            &pool,
+            "user3",
+            "user3@mail.com",
+            "User Three",
+            &None,
+            &None,
+            &None
+        ).await?.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        add_participant(&pool, user.user_id, event_id, 1, 1).await?;
+        update_participant_role(&pool, user.user_id, event_id, 5).await?;
+        let participants = get_event_participants(&pool, event_id).await?;
+        assert_eq!(participants[0].2, 5);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_participant_status() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user = create_user_db(
+            &pool,
+            "user4",
+            "user4@mail.com",
+            "User Four",
+            &None,
+            &None,
+            &None
+        ).await?.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        add_participant(&pool, user.user_id, event_id, 1, 1).await?;
+        update_participant_status(&pool, user.user_id, event_id, 3).await?;
+        let participants = get_event_participants(&pool, event_id).await?;
+        assert_eq!(participants[0].3, 3);
+        Ok(())
+    }
+
+//USER EVENTS
+
+    #[tokio::test]
+    async fn test_get_user_events() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user = create_user_db(
+            &pool,
+            "user5",
+            "user5@mail.com",
+            "User Five",
+            &None,
+            &None,
+            &None
+        ).await?.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        add_participant(&pool, user.user_id, event_id, 1, 1).await?;
+        let events = get_user_events(&pool, user.user_id, 10, 0).await?;
+        assert_eq!(events.len(), 1);
+        Ok(())
+    }
+
+//TOKENS
+
+    #[tokio::test]
+    async fn test_event_token() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event_id = create_event(&pool, "Event", None, None, None).await?;
+        let token = create_event_token(&pool, event_id, 1).await?;
+        let found_event_id = get_event_id_by_token(&pool, &token).await?;
+        assert_eq!(found_event_id.unwrap(), event_id);
+        Ok(())
+    }
+}
