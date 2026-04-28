@@ -24,11 +24,11 @@ pub async fn create_user_db(
     name: &str,
     birthday: &Option<String>,
     avatar_url: &Option<String>,
-    descripion: &Option<String>
+    description_profile: &Option<String>
 ) -> Result<i64, anyhow::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO users (username, email, name, birthday, avatar_url, descripion)
+        INSERT INTO users (username, email, name, birthday, avatar_url, description_profile)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING user_id
         "#, 
@@ -37,7 +37,7 @@ pub async fn create_user_db(
         name, 
         birthday.clone(), 
         avatar_url.clone(),
-        descripion.clone()
+        description_profile.clone()
     )
     .fetch_one(pool)
     .await
@@ -54,7 +54,7 @@ pub async fn edit_user_db(
     name: Option<&str>,
     birthday: Option<&str>,
     avatar_url: Option<&str>,
-    descripion: Option<&str>
+    description_profile: Option<&str>
 ) -> Result<(), anyhow::Error> {
     sqlx::query(
         r#"
@@ -64,7 +64,7 @@ pub async fn edit_user_db(
             name = COALESCE($3, name),
             birthday = COALESCE($4, birthday),
             avatar_url = COALESCE($5, avatar_url),
-            descripion = COALESCE($6, descripion)
+            description_profile = COALESCE($6, description_profile)
         WHERE user_id = $7
         "#
     )
@@ -73,7 +73,7 @@ pub async fn edit_user_db(
     .bind(name)
     .bind(birthday)
     .bind(avatar_url)
-    .bind(descripion)
+    .bind(description_profile)
     .bind(user_id)
     .execute(pool)
     .await
@@ -86,7 +86,7 @@ pub async fn find_user_by_email(pool: &PgPool, email: &str) -> anyhow::Result<Op
     let user = sqlx::query_as::<_, User>(
         r#"
         SELECT user_id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at, descripion
+               is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE email = $1 AND is_deleted = false
         "#
@@ -102,7 +102,7 @@ pub async fn find_user_by_token(pool: &PgPool, token: &str) -> Result<Option<Use
     let user = sqlx::query_as::<_, User>(
         r#"
         SELECT u.user_id, u.username, u.email, u.name, u.birthday, u.avatar_url,
-               u.is_deleted, u.created_at, u.last_online_at, descripion
+               u.is_deleted, u.created_at, u.last_online_at, description_profile
         FROM users u
         JOIN token_store t ON u.user_id = t.user_id
         WHERE t.token = $1 AND t.is_active = true AND t.expires_at > NOW()
@@ -121,7 +121,7 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
         User,
         r#"
         SELECT user_id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at, descripion
+               is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE user_id = $1 AND is_deleted = false
         "#,
@@ -142,7 +142,7 @@ pub async fn find_user_by_username(
         User,
         r#"
         SELECT user_id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at, descripion
+               is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE username = $1 AND is_deleted = false
         "#,
@@ -182,7 +182,7 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, anyhow::
         User,
         r#"
         SELECT u.user_id, u.username, u.email, u.name, u.birthday, u.avatar_url,
-               u.is_deleted, u.created_at, u.last_online_at, descripion
+               u.is_deleted, u.created_at, u.last_online_at, description_profile
         FROM users u
         JOIN token_store t ON u.user_id = t.user_id
         WHERE t.token = $1 
@@ -318,7 +318,7 @@ pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, anyhow::Error> {
         User,
         r#"
         SELECT user_id, username, email, name, birthday, avatar_url,
-               is_deleted, created_at, last_online_at, descripion
+               is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE is_deleted = false
         "#

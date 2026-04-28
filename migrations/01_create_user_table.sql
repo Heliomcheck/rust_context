@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
-    descripion TEXT,
+    description_profile TEXT,
     birthday TEXT,
     avatar_url TEXT,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,

@@ -2,7 +2,7 @@
 CREATE TABLE events (
     event_name VARCHAR(200) NOT NULL,
     event_id BIGSERIAL PRIMARY KEY,
-    description TEXT DEFAULT NULL,
+    description_profile TEXT DEFAULT NULL,
     start_date TIMESTAMPTZ DEFAULT NULL,
     end_date TIMESTAMPTZ DEFAULT NULL,
     is_active BOOLEAN DEFAULT TRUE,

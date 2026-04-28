@@ -36,7 +36,7 @@ pub struct User {
     pub email: String,
     pub birthday: Option<String>,
     pub avatar_url: Option<String>, // make access through user_id
-    pub descripion: Option<String>,
+    pub description_profile: Option<String>,
 
     pub is_deleted: bool,
     pub created_at: DateTime<Utc>,
@@ -51,14 +51,14 @@ impl User {
         birthday: Option<String>,
         name: String,
         avatar_url: Option<String>,
-        descripion: Option<String>
+        description_profile: Option<String>
     ) -> Self {
         User {
             username: username,
             email: email,
             birthday: birthday,      // Set default birthday if not provided
             user_id: user_id,
-            descripion: descripion,
+            description_profile: description_profile,
             name: name,
             avatar_url: avatar_url,
 

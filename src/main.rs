@@ -20,6 +20,7 @@ pub(crate) mod models;
 pub(crate) mod handlers;
 pub(crate) mod data_base;
 pub(crate) mod test_utils;
+pub(crate) mod errors;
 
 use structs::*;
 use context::*;
