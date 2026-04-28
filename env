@@ -1,0 +1,8 @@
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/rust_context_db
+DATABASE_URL_TEST=postgres://postgres:postgres@localhost:5433/rust_context_test
+
+SMTP_USERNAME=example@test.ru
+SMTP_PASSWORD=fjoieqknvciusdf
+SMTP_SERVER=smtp.example.ru
+SMTP_PORT=587
+TTL_VERIFICATION_CODE=300  # in seconds

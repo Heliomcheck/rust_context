@@ -13,6 +13,7 @@ Client: https://github.com/CQuann/Krug.git
 ## Install:
 ```bash
 docker-compose up -d  # for database
+mv env .env # for set .env file
 cargo build
 cargo install --path .
 ```
