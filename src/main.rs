@@ -7,7 +7,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
+use crate::handlers::event::{
+    create_event_handler, get_events_list_handler, get_event_handler,
+    update_event_handler, change_status_handler,
+    upload_event_avatar_handler, get_event_avatar_handler,
+};
 mod context;
 mod structs;
 
@@ -79,6 +83,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         
+        .route("/events", routing::post(create_event_handler).get(get_events_list_handler))
+        .route("/events/{id}", routing::get(get_event_handler).put(update_event_handler))
+        .route("/events/{id}/status", routing::patch(change_status_handler))
+        .route("/events/{id}/avatar", routing::post(upload_event_avatar_handler))
+        .route("/event-avatars/{filename}", routing::get(get_event_avatar_handler))
+
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
         .with_state(state);
 
