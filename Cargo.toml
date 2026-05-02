@@ -31,7 +31,8 @@ multipart = "0.18.0"
 mime_guess = "2.0.5"
 blake3 = "1.8.5"
 thiserror = "2.0.18"
-
+image = "0.24"
+sha2 = "0.10"
 
 # [profile.dev]
 # rustflags = ["-A", "warnings"]

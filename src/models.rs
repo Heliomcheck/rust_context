@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
 use axum::http::StatusCode;
 use axum::Json;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, Json<Value>) {
     let mut error_map = serde_json::Map::new();
@@ -95,4 +97,63 @@ pub struct UserDataResponse {
     pub email: String,
     pub name: String,
     pub birthday: Option<String>
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateEventRequest {
+    pub title: String,
+    pub description: Option<String>,
+    pub startDateTime: Option<String>,   // ISO строка
+    pub endDateTime: Option<String>,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEventRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub startDateTime: Option<String>,
+    pub endDateTime: Option<String>,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeEventStatusRequest {
+    pub status: String, // "active" или "archived"
+}
+
+#[derive(Debug, Serialize)]
+pub struct EventResponse {
+    pub id: Uuid,
+    pub title: String,
+    pub description: Option<String>,
+    pub startDateTime: Option<String>,
+    pub endDateTime: Option<String>,
+    pub color: Option<String>,
+    #[serde(rename = "createdBy")]
+    pub created_by: String,   // user_id как строка
+    pub createdAt: String,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EventListResponse {
+    pub items: Vec<EventResponse>,
+    pub total: i64,
+}
+
+pub struct NewEvent {
+    pub title: String,
+    pub description: Option<String>,
+    pub start_date_time: Option<DateTime<Utc>>,
+    pub end_date_time: Option<DateTime<Utc>>,
+    pub color: Option<String>,
+    pub created_by: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EventsQuery {
+    pub status: String,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }

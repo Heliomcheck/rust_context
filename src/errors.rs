@@ -18,6 +18,8 @@ pub enum AppError {
     InvalidToken,
     #[error("Internal error: {0}")]
     Internal(String),
+    #[error("Bad request: {0}")]
+    BadRequest(String),
 }
 
 impl IntoResponse for AppError {
