@@ -31,7 +31,7 @@ pub struct ChatMessage {
 #[derive(Debug, Clone, FromRow)]
 pub struct User {
     pub user_id: i64,
-    pub name: String,
+    pub display_name: String,
     pub username: String,
     pub email: String,
     pub birthday: Option<String>,
@@ -49,7 +49,7 @@ impl User {
         username: String, 
         email: String,
         birthday: Option<String>,
-        name: String,
+        display_name: String,
         avatar_url: Option<String>,
         description_profile: Option<String>
     ) -> Self {
@@ -59,7 +59,7 @@ impl User {
             birthday: birthday,      // Set default birthday if not provided
             user_id: user_id,
             description_profile: description_profile,
-            name: name,
+            display_name: display_name,
             avatar_url: avatar_url,
 
             is_deleted: false,
@@ -73,7 +73,7 @@ impl User {
             self.email = payload.email.unwrap_or(self.email.clone());
             self.birthday = payload.birthday.or(self.birthday.clone());    // Keep existing birthday if not provided
             self.user_id = self.user_id;
-            self.name = payload.display_name.unwrap_or(self.name.clone());
+            self.display_name = payload.display_name.unwrap_or(self.display_name.clone());
             self.avatar_url = payload.avatar_url.or(self.avatar_url.clone());
 
             self.is_deleted = self.is_deleted;

@@ -100,14 +100,14 @@ pub async fn get_user_data_handler(
         id: user.user_id,
         username: user.username.clone(),  // ← clone()
         email: user.email.clone(),        // ← clone()
-        name: user.name.clone(),          // ← clone()
+        name: user.display_name.clone(),          // ← clone()
         birthday: user.birthday.clone()
     };
     
     (StatusCode::OK, Json(json!({"user":{
         "username": user.username,
         "email": user.email,
-        "display_name": user.name,
+        "display_name": user.display_name,
         "birthday": user.birthday
     }})))
 }

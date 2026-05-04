@@ -50,9 +50,9 @@ impl UserStore {
             username: String, 
             email: String,
             birthday: Option<String>,
-            name: String,
+            display_name: String,
             avatar_url: Option<String>,
-            description: Option<String>,
+            description_profile: Option<String>,
             _: &PgPool
         ) -> Result<i64, anyhow::Error> {
 
@@ -65,7 +65,7 @@ impl UserStore {
         }
 
         let user = User::create(user_id, username.clone(),
-            email.clone(), birthday.clone(), name.clone(), avatar_url.clone(), description.clone()
+            email.clone(), birthday.clone(), display_name.clone(), avatar_url.clone(), description_profile.clone()
         );
 
         self.users.insert(user_id, user);

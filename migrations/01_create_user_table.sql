@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
     description_profile TEXT,
     birthday TEXT,
     avatar_url TEXT,
