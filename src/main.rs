@@ -13,8 +13,7 @@ mod structs;
 
 
 pub(crate) mod mail;
-pub(crate) mod user;
-pub(crate) mod generator;
+pub(crate) mod user_store;
 pub(crate) mod secrets;
 pub(crate) mod models;
 pub(crate) mod handlers;
@@ -26,7 +25,7 @@ use structs::*;
 use context::*;
 
 use crate::{
-    user::*,
+    user_store::*,
     handlers::auth::*,
     handlers::user::*,
     secrets::token::TokenStore,
@@ -128,5 +127,5 @@ fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
         .with(EnvFilter::from_default_env())
         .init();
     
-    guard  // ← возвращаем guard
+    guard
 }

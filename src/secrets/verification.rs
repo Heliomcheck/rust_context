@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc, Duration};
 use std::collections::HashMap;
 
+use crate::secrets::generator::Generator;
+
 #[derive(Debug)]
 pub struct VerificationCode {
     pub code: String,
@@ -23,7 +25,7 @@ impl VerificationCode {
 
     pub fn generate(email: String, ttl_minutes: i64) -> Self { // Generate random number
         Self::new(email, 
-            crate::generator::Generator::verification_code(), ttl_minutes)
+            Generator::verification_code(), ttl_minutes)
     }
 
     pub fn is_expired(&self) -> bool {

@@ -1,4 +1,4 @@
-use crate::{structs::{User}, TokenStore, user};
+use crate::{structs::{User}, TokenStore, user_store};
 use std::{collections::HashMap, f32::consts::E, ptr::null};
 use chrono::{Utc, Duration};
 use anyhow::{Context, Ok, Result};
@@ -75,27 +75,69 @@ impl UserStore {
         Ok(user_id)
     }
 
-    // pub async fn edit_user(&mut self, payload: EditUserRequest) {
-    //     if let Some(user_id) = self.users_by_username.get(&payload.username.unwrap_or_else(|| )) {
-    //         if let Some(user) = self.users.get_mut(user_id) {
-    //             user.name = payload.display_name.clone().unwrap_or_else(|| user.name.clone());
-    //             user.email = payload.email.clone().unwrap_or_else(|| user.email.clone());
-    //             user.birthday = payload.birthday.clone().or_else(|| user.birthday.clone());
-    //             user.avatar_url = payload.avatar_url.clone().or_else(|| user.avatar_url.clone());
-    //         }
-    //     }
-    // }
 
-    pub fn get_user_by_email(&self, email: &str) -> Option<&User> {
-        self.users_by_email.get(email).and_then(|id| self.users.get(id))
+
+    pub async fn get_user_by_id(
+        &mut self,
+        pool: &PgPool,
+        user_id: i64,
+    ) -> Result<Option<User>, anyhow::Error> {
+        // 1. Проверяем кэш
+        if let Some(user) = self.users.get(&user_id) {
+            return Ok(Some(user.clone()));
+        }
+
+        // 2. Ищем в БД
+        let user_opt = find_user_by_id(pool, user_id).await?;
+
+        // 3. Если нашли – добавляем в кэш
+        if let Some(ref user) = user_opt {
+            self.users.insert(user_id, user.clone());
+            self.users_by_email.insert(user.email.clone(), user_id);
+            self.users_by_username.insert(user.username.clone(), user_id);
+        }
+
+        Ok(user_opt)
     }
 
-    pub fn get_user_by_id(&self, id: i64) -> Option<&User> {
-        self.users.get(&id)
+    pub async fn get_user_by_email(
+        &mut self,
+        pool: &PgPool,
+        email: &str,
+    ) -> Result<Option<User>, anyhow::Error> {
+        if let Some(user) = self.users_by_email.get(email).and_then(|id| self.users.get(id)) {
+            return Ok(Some(user.clone()));
+        }
+
+        let user_opt = find_user_by_email(pool, email).await?;
+
+        if let Some(ref user) = user_opt {
+            self.users.insert(user.user_id, user.clone());
+            self.users_by_email.insert(user.email.clone(), user.user_id);
+            self.users_by_username.insert(user.username.clone(), user.user_id);
+        }
+
+        Ok(user_opt)
     }
 
-    pub fn get_user_by_username(&self, username: &str) -> Option<&User> {
-        self.users_by_username.get(username).and_then(|id| self.users.get(id))
+    pub async fn get_user_by_username(
+        &mut self,
+        pool: &PgPool,
+        username: &str,
+    ) -> Result<Option<User>, anyhow::Error> {
+        if let Some(user) = self.users_by_username.get(username).and_then(|id| self.users.get(id)) {
+            return Ok(Some(user.clone()));
+        }
+
+        let user_opt = find_user_by_username(pool, username).await?;
+
+        if let Some(ref user) = user_opt {
+            self.users.insert(user.user_id, user.clone());
+            self.users_by_email.insert(user.email.clone(), user.user_id);
+            self.users_by_username.insert(user.username.clone(), user.user_id);
+        }
+
+        Ok(user_opt)
     }
 
     pub fn check_username(&self, username: &str) -> bool { // refactor
@@ -145,7 +187,7 @@ async fn test_get_user_by_email() -> anyhow::Result<()> {
         Some("test".to_string()),
         &pool
     ).await?;
-    let user = store.get_user_by_email("test@example.com");
+    let user = store.get_user_by_email(&pool,"test@example.com").await?;
     assert!(user.is_some());
     Ok(())
 }
@@ -164,7 +206,7 @@ async fn test_get_user_by_id() -> anyhow::Result<()> {
         Some("test".to_string()),
         &pool
     ).await?;
-    let user = store.get_user_by_id(user_id);
+    let user = store.get_user_by_id(&pool, user_id).await?;
     assert!(user.is_some());
     Ok(())
 }

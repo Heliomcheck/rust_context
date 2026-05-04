@@ -1,17 +1,17 @@
 use sqlx::postgres::{PgPoolOptions, PgPool};
-use anyhow::{Context, Ok};
+use anyhow::{Context};
+use std::result::Result;
 
 use chrono::{DateTime, Utc};
 
 use crate::structs::User;
 
 
-pub async fn create_pool(database_url: &str) -> Result<PgPool, anyhow::Error> {
+pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
     let pool = PgPoolOptions::new()
     .max_connections(10)
     .connect(database_url)
-    .await
-    .context("Failed to connect to database")?;
+    .await?;
 
     sqlx::migrate!().run(&pool).await?;
     Ok(pool)
@@ -25,7 +25,7 @@ pub async fn create_user_db(
     birthday: &Option<String>,
     avatar_url: &Option<String>,
     description_profile: &Option<String>
-) -> Result<i64, anyhow::Error> {
+) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
         r#"
         INSERT INTO users (username, email, display_name, birthday, avatar_url, description_profile)
@@ -40,8 +40,7 @@ pub async fn create_user_db(
         description_profile.clone()
     )
     .fetch_one(pool)
-    .await
-    .context("Failed to create user")?;
+    .await?;
     
     Ok(row.user_id)
 }
@@ -55,7 +54,7 @@ pub async fn edit_user_db(
     birthday: Option<&str>,
     avatar_url: Option<&str>,
     description_profile: Option<&str>
-) -> Result<(), anyhow::Error> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE users
@@ -76,13 +75,12 @@ pub async fn edit_user_db(
     .bind(description_profile)
     .bind(user_id)
     .execute(pool)
-    .await
-    .context("Failed to edit user")?;
+    .await?;
     
     Ok(())
 } // add delete user later, check later
 
-pub async fn find_user_by_email(pool: &PgPool, email: &str) -> anyhow::Result<Option<User>> {
+pub async fn find_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error> {
     let user = sqlx::query_as::<_, User>(
         r#"
         SELECT user_id, username, email, display_name, birthday, avatar_url,
@@ -98,7 +96,7 @@ pub async fn find_user_by_email(pool: &PgPool, email: &str) -> anyhow::Result<Op
     Ok(user)
 }
 
-pub async fn find_user_by_token(pool: &PgPool, token: &str) -> Result<Option<User>, anyhow::Error> {
+pub async fn find_user_by_token(pool: &PgPool, token: &str) -> Result<Option<User>, sqlx::Error> {
     let user = sqlx::query_as::<_, User>(
         r#"
         SELECT u.user_id, u.username, u.email, u.display_name, u.birthday, u.avatar_url,
@@ -110,13 +108,12 @@ pub async fn find_user_by_token(pool: &PgPool, token: &str) -> Result<Option<Use
     )
     .bind(token)
     .fetch_optional(pool)
-    .await
-    .context("Failed to find user by token")?;
+    .await?;
     
     Ok(user)
 }
 
-pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>, anyhow::Error> {
+pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>, sqlx::Error> {
     let user = sqlx::query_as!(
         User,
         r#"
@@ -128,8 +125,7 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
         user_id
     )
     .fetch_optional(pool) 
-    .await
-    .context("Failed to find user by id")?;
+    .await?;
     
     Ok(user)
 }
@@ -137,7 +133,7 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
 pub async fn find_user_by_username(
     pool: &PgPool,
     username: &str,
-) -> Result<Option<User>, anyhow::Error> {
+) -> Result<Option<User>, sqlx::Error> {
     let user = sqlx::query_as!(
         User,
         r#"
@@ -149,8 +145,7 @@ pub async fn find_user_by_username(
         username
     )
     .fetch_optional(pool)
-    .await
-    .context("Failed to find user by username")?;
+    .await?;
     
     Ok(user)
 }
@@ -160,7 +155,7 @@ pub async fn create_token(
     user_id: i64,
     token: &str,
     expires_at: DateTime<Utc>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO token_store (user_id, token, expires_at, is_active)
@@ -171,13 +166,12 @@ pub async fn create_token(
         expires_at
     )
     .execute(pool)
-    .await
-    .context("Failed to create token")?;
+    .await?;
 
     Ok(())
 }
 
-pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, anyhow::Error> {
+pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, sqlx::Error> {
     let user = sqlx::query_as!(
         User,
         r#"
@@ -193,13 +187,12 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, anyhow::
         token
     )
     .fetch_optional(pool)
-    .await
-    .context("Failed to validate token")?;
+    .await?;
 
     Ok(user.is_some())
 }
 
-pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), anyhow::Error> {
+pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE token_store
@@ -209,13 +202,12 @@ pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), anyhow::
         token
     )
     .execute(pool)
-    .await
-    .context("Failed to deactivate token")?;
+    .await?;
 
     Ok(())
 }
 
-pub async fn deactivate_all_user_tokens(pool: &PgPool, user_id: i64) -> Result<(), anyhow::Error> {
+pub async fn deactivate_all_user_tokens(pool: &PgPool, user_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE token_store
@@ -225,13 +217,12 @@ pub async fn deactivate_all_user_tokens(pool: &PgPool, user_id: i64) -> Result<(
         user_id
     )
     .execute(pool)
-    .await
-    .context("Failed to deactivate all user tokens")?;
+    .await?;
 
     Ok(())
 }
 
-pub async fn find_token_by_user_id(pool: &PgPool, user_id: i64) -> Result<Option<String>, anyhow::Error> {
+pub async fn find_token_by_user_id(pool: &PgPool, user_id: i64) -> Result<Option<String>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
         SELECT token
@@ -243,8 +234,7 @@ pub async fn find_token_by_user_id(pool: &PgPool, user_id: i64) -> Result<Option
         user_id
     )
     .fetch_optional(pool)
-    .await
-    .context("Failed to find token by user id")?;
+    .await?;
 
     Ok(row.map(|r| r.token))
 }
@@ -254,7 +244,7 @@ pub async fn refresh_token(
     old_token: &str,
     new_token: &str,
     expires_in_hours: DateTime<Utc>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), sqlx::Error> {
     deactivate_token(pool, old_token).await?;
     
     let row = sqlx::query!(
@@ -265,12 +255,11 @@ pub async fn refresh_token(
         old_token
     )
     .fetch_optional(pool)
-    .await
-    .context("Failed to get user_id from old token")?;
+    .await?;
 
     let user_id: i64 = match row {
         Some(r) => r.user_id,
-        None => return Err(anyhow::anyhow!("Old token not found")),
+        None => return Err(sqlx::Error::RowNotFound),
     };
 
     create_token(pool, user_id, new_token, expires_in_hours).await?;
@@ -278,7 +267,7 @@ pub async fn refresh_token(
     Ok(())
 }
 
-pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, anyhow::Error> {
+pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query!(
         r#"
         DELETE FROM token_store
@@ -286,8 +275,7 @@ pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, anyhow::Error>
         "#
     )
     .execute(pool)
-    .await
-    .context("Failed to cleanup expired tokens")?;
+    .await?;
 
     Ok(result.rows_affected())
 }
@@ -296,7 +284,7 @@ pub async fn update_user_avatar(
     pool: &PgPool,
     user_id: i64,
     avatar_url: &str,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE users
@@ -307,13 +295,12 @@ pub async fn update_user_avatar(
         user_id
     )
     .execute(pool)
-    .await
-    .context("Failed to update avatar")?;
+    .await?;
     
     Ok(())
 }
 
-pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, anyhow::Error> { // non tested
+pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { // non tested
     let users = sqlx::query_as!(
         User,
         r#"
@@ -324,15 +311,14 @@ pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, anyhow::Error> {
         "#
     )
     .fetch_all(pool)
-    .await
-    .context("Failed to load users from database")?;
+    .await?;
     
     Ok(users)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::generator;
+    use crate::secrets::generator;
 
     use super::*;
     use chrono::Utc;

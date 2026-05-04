@@ -7,18 +7,18 @@ use crate::errors::AppError;
 pub async fn create_event(
     pool: &PgPool,
     event_name: &str,
-    description: Option<&str>,
+    description_event: Option<&str>,
     start_date: Option<DateTime<Utc>>,
     end_date: Option<DateTime<Utc>>
 ) -> Result<i64, AppError> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO events (event_name, description_profile, start_date, end_date)
+        INSERT INTO events (event_name, description_event, start_date, end_date)
         VALUES ($1, $2, $3, $4)
         RETURNING event_id
         "#,
         event_name,
-        description,
+        description_event,
         start_date,
         end_date
     )
@@ -35,7 +35,7 @@ pub async fn get_event_by_id(
                     Option<DateTime<Utc>>, bool, DateTime<Utc>, i16)>> {
     let row = sqlx::query!(
         r#"
-        SELECT event_id, event_name, description_profile, start_date, end_date, is_active, created_at, status_id
+        SELECT event_id, event_name, description_event, start_date, end_date, is_active, created_at, status_id
         FROM events
         WHERE event_id = $1
         "#,
@@ -48,7 +48,7 @@ pub async fn get_event_by_id(
     Ok(row.map(|r| (
         r.event_id,
         r.event_name,
-        r.description_profile,
+        r.description_event,
         r.start_date,
         r.end_date,
         r.is_active.unwrap_or(true),
@@ -65,7 +65,7 @@ pub async fn get_user_events(
 ) -> Result<Vec<(i64, String, Option<String>, Option<DateTime<Utc>>, Option<DateTime<Utc>>, bool, DateTime<Utc>, i16)>> {
     let rows = sqlx::query!(
         r#"
-        SELECT e.event_id, e.event_name, e.description_profile, e.start_date, e.end_date, e.is_active, e.created_at, e.status_id
+        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, e.is_active, e.created_at, e.status_id
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
         WHERE eu.user_id = $1
@@ -80,11 +80,11 @@ pub async fn get_user_events(
     .await
     .context("Failed to get user events")?;
 
-    Ok(rows.into_iter().map(|r| (r.event_id, r.event_name, r.description_profile, r.start_date, 
+    Ok(rows.into_iter().map(|r| (r.event_id, r.event_name, r.description_event, r.start_date, 
         r.end_date, r.is_active.unwrap_or(true), r.created_at.unwrap(), r.status_id)).collect())
 }
 
-pub async fn get_event_participants(
+pub async fn get_event_members(
     pool: &PgPool,
     event_id: i64,
 ) -> Result<Vec<(i64, String, i16, i16, DateTime<Utc>)>> {
@@ -110,7 +110,7 @@ pub async fn update_event(
     pool: &PgPool,
     event_id: i64,
     event_name: Option<&str>,
-    description_profile: Option<&str>,
+    description_event: Option<&str>,
     start_date: Option<DateTime<Utc>>,
     end_date: Option<DateTime<Utc>>,
     is_active: Option<bool>,
@@ -120,14 +120,14 @@ pub async fn update_event(
         UPDATE events
         SET 
             event_name = COALESCE($1, event_name),
-            description_profile = COALESCE($2, description_profile),
+            description_event = COALESCE($2, description_event),
             start_date = COALESCE($3, start_date),
             end_date = COALESCE($4, end_date),
             is_active = COALESCE($5, is_active)
         WHERE event_id = $6
         "#,
         event_name,
-        description_profile,
+        description_event,
         start_date,
         end_date,
         is_active,
@@ -161,9 +161,9 @@ pub async fn update_event_status(
     Ok(())
 }
 
-// ============== УЧАСТНИКИ ==============
+// Members
 
-pub async fn add_participant(
+pub async fn add_member(
     pool: &PgPool,
     user_id: i64,
     event_id: i64,
@@ -184,12 +184,12 @@ pub async fn add_participant(
     )
     .execute(pool)
     .await
-    .context("Failed to add participant")?;
+    .context("Failed to add member")?;
 
     Ok(())
 }
 
-pub async fn remove_participant(
+pub async fn remove_member(
     pool: &PgPool,
     user_id: i64,
     event_id: i64,
@@ -204,12 +204,12 @@ pub async fn remove_participant(
     )
     .execute(pool)
     .await
-    .context("Failed to remove participant")?;
+    .context("Failed to remove member")?;
 
     Ok(())
 }
 
-pub async fn update_participant_role(
+pub async fn update_member_role(
     pool: &PgPool,
     user_id: i64,
     event_id: i64,
@@ -227,12 +227,12 @@ pub async fn update_participant_role(
     )
     .execute(pool)
     .await
-    .context("Failed to update participant role")?;
+    .context("Failed to update member role")?;
 
     Ok(())
 }
 
-pub async fn update_participant_status(
+pub async fn update_member_status(
     pool: &PgPool,
     user_id: i64,
     event_id: i64,
@@ -250,7 +250,7 @@ pub async fn update_participant_status(
     )
     .execute(pool)
     .await
-    .context("Failed to update participant status")?;
+    .context("Failed to update member status")?;
 
     Ok(())
 }
@@ -382,10 +382,10 @@ mod tests {
         Ok(())
     }
 
-//PARTICIPANTS
+// Members
 
     #[tokio::test]
-    async fn test_add_and_check_participant() -> anyhow::Result<()> {
+    async fn test_add_and_check_member() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -397,14 +397,14 @@ mod tests {
             &None
         ).await?;
         let event_id = create_event(&pool, "Event", None, None, None).await?;
-        add_participant(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(exists);
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_remove_participant() -> anyhow::Result<()> {
+    async fn test_remove_member() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -416,15 +416,15 @@ mod tests {
             &None
         ).await?;
         let event_id = create_event(&pool, "Event", None, None, None).await?;
-        add_participant(&pool, user_id, event_id, 1, 1).await?;
-        remove_participant(&pool, user_id, event_id).await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
+        remove_member(&pool, user_id, event_id).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(!exists);
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_update_participant_role() -> anyhow::Result<()> {
+    async fn test_update_member_role() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -436,15 +436,15 @@ mod tests {
             &None
         ).await?;
         let event_id = create_event(&pool, "Event", None, None, None).await?;
-        add_participant(&pool, user_id, event_id, 1, 2).await?;
-        update_participant_role(&pool, user_id, event_id, 2).await?;
-        let participants = get_event_participants(&pool, event_id).await?;
-        assert_eq!(participants[0].2, 2);
+        add_member(&pool, user_id, event_id, 1, 2).await?;
+        update_member_role(&pool, user_id, event_id, 2).await?;
+        let members = get_event_members(&pool, event_id).await?;
+        assert_eq!(members[0].2, 2);
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_update_participant_status() -> anyhow::Result<()> {
+    async fn test_update_member_status() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -456,10 +456,10 @@ mod tests {
             &None
         ).await?;
         let event_id = create_event(&pool, "Event", None, None, None).await?;
-        add_participant(&pool, user_id, event_id, 1, 1).await?;
-        update_participant_status(&pool, user_id, event_id, 3).await?;
-        let participants = get_event_participants(&pool, event_id).await?;
-        assert_eq!(participants[0].3, 3);
+        add_member(&pool, user_id, event_id, 1, 1).await?;
+        update_member_status(&pool, user_id, event_id, 3).await?;
+        let members = get_event_members(&pool, event_id).await?;
+        assert_eq!(members[0].3, 3);
         Ok(())
     }
 
@@ -478,7 +478,7 @@ mod tests {
             &None
         ).await?;
         let event_id = create_event(&pool, "Event", None, None, None).await?;
-        add_participant(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
         let events = get_user_events(&pool, user_id, 10, 0).await?;
         assert_eq!(events.len(), 1);
         Ok(())

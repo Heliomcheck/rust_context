@@ -17,7 +17,7 @@ use std::result::Result;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 use sqlx::PgPool;
-use crate::{data_base::user_db::*, generator};
+use crate::{data_base::user_db::*, secrets::generator};
 use tracing::*;
 
 use crate::{data_base::user_db::{create_token, create_user_db, validate_token}, models::CheckUsernameRequest, secrets::token::*, structs::*};
@@ -25,7 +25,7 @@ use crate::mail::send_mail_verif_code;
 
 use crate::{
     models::*,
-    user::*,
+    user_store::*,
     secrets::verification::VerificationStore
 };
 

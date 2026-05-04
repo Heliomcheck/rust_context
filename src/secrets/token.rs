@@ -1,6 +1,6 @@
 use chrono::{Utc, DateTime};
 
-use crate::generator::Generator;
+use crate::secrets::generator::Generator;
 
 #[derive(Debug, Clone)]
 pub struct TokenStore {

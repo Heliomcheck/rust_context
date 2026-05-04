@@ -27,11 +27,11 @@ use axum::http::{Request, Response};
 use chrono::Utc;
 use axum::http::header::{self, HeaderMap};
 
-use crate::{data_base::user_db::find_user_by_token, generator, models::CheckUsernameRequest, secrets::token::{self, TokenStore}, structs::*};
+use crate::{data_base::user_db::find_user_by_token, secrets::generator, models::CheckUsernameRequest, secrets::token::{self, TokenStore}, structs::*};
 
 use crate::{
     models::*,
-    user::*,
+    user_store::*,
     secrets::verification::VerificationStore,
     data_base::user_db::*
 };

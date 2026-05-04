@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::option::Option;
 use sqlx::PgPool;
 
-use crate::user::UserStore;
+use crate::user_store::UserStore;
 
 use crate::secrets::verification::VerificationStore;
 use crate::models::EditUserRequest;
