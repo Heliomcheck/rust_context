@@ -28,6 +28,19 @@ pub struct ChatMessage {
 //     pub subgroups: Option<Vec<String>>
 // }
 
+
+pub struct Events {
+    pub event_name: String,
+    pub event_id: i64,
+    pub description_event: Option<String>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub color: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub status_id: i16
+}
+
 #[derive(Debug, Clone, FromRow)]
 pub struct User {
     pub user_id: i64,

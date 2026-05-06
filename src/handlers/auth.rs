@@ -107,7 +107,7 @@ pub async fn register_handler(
         tracing::warn!("User created in DB but failed to add to cache: {}", e);
     }
     
-    (StatusCode::CREATED, Json(json!({ "token": token_str })))
+    (StatusCode::CREATED, Json(json!({ "token": token_str, "userId": user_id})))
 }
 
 pub async fn request_code_handler(
@@ -171,7 +171,7 @@ pub async fn verify_code_handler(
         }
     };
 
-    (StatusCode::OK, Json(json!({ "isNewUser": false, "token": token })))
+    (StatusCode::OK, Json(json!({ "isNewUser": false, "token": token, "userId": user.user_id })))
 }
 
 pub async fn token_validate_handler(

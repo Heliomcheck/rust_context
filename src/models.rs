@@ -88,11 +88,35 @@ pub struct EditUserRequest {
     pub descripion: Option<String>
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UserDataResponse {
     pub id: i64,
     pub username: String,
     pub email: String,
     pub name: String,
     pub birthday: Option<String>
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateEventRequest {
+    pub title: String,
+    pub location: Option<String>,
+    pub description: Option<String>,
+    pub startDateTime: Option<String>,
+    pub endDateTime: Option<String>,
+    pub color: String
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateEventResponse {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub location: Option<String>,
+    pub startDateTime: Option<String>, 
+    pub endDateTime: Option<String>,
+    pub color: String, 
+    pub createdBy: String,
+    pub createdAt: String,
+    pub status: String
 }

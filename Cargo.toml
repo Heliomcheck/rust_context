@@ -31,6 +31,7 @@ multipart = "0.18.0"
 mime_guess = "2.0.5"
 blake3 = "1.8.5"
 thiserror = "2.0.18"
+axum-debug = "0.3.3"
 
 
 # [profile.dev]

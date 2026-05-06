@@ -185,7 +185,7 @@ pub async fn upload_avatar_handler(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to update avatar" })));
         }
         
-        return (StatusCode::OK, Json(json!({ "success": true, "avatar_url": avatar_url })));
+        return (StatusCode::OK, Json(json!({ "success": true})));
     }
     
     (StatusCode::BAD_REQUEST, Json(json!({ "error": "No file provided" })))

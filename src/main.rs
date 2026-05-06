@@ -9,7 +9,6 @@ use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod context;
-mod structs;
 
 
 pub(crate) mod mail;
@@ -21,6 +20,8 @@ pub(crate) mod data_base;
 pub(crate) mod test_utils;
 pub(crate) mod errors;
 
+pub(crate) mod structs;
+
 use structs::*;
 use context::*;
 
@@ -28,6 +29,7 @@ use crate::{
     user_store::*,
     handlers::auth::*,
     handlers::user::*,
+    handlers::event::*,
     secrets::token::TokenStore,
     secrets::verification::VerificationStore,
     data_base::user_db::create_pool
@@ -79,6 +81,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", routing::get(health_handler)) // delete in future
         
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
+
+        .route("/events", routing::post(create_event_handler))
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
