@@ -6,39 +6,71 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
-axum = { version = "0.8.8", features = ["ws"]}
+
+axum = { version = "0.8.8", features = ["ws", "multipart"] }
+
 axum-auth = "0.8.1"
-serde = {version = "1", features = ["derive"]}
+
+axum-extra = { version = "0.10", features = [
+    "typed-header",
+    "multipart"
+] }
+
+axum-macros = "0.5.0"
+
+tower = { version = "0.4", features = ["util"] }
+
+headers = "0.4"
+
+mime_guess = "2.0.5"
+
+serde = { version = "1", features = ["derive"] }
+
 serde_json = "1"
 futures-util = "0.3"
 futures-macro = "=0.3.32"
 dotenvy = "0.15.7"
-lettre = {version = "0.11.20", features = ["smtp-transport", "tokio1-native-tls", "builder"]}
-uuid = { version = "1.23.0", features = ["v4"] }
+
+lettre = { version = "0.11.20", features = [
+    "smtp-transport",
+    "tokio1-native-tls",
+    "builder"
+] }
+
+uuid = { version = "1.23.0", features = [
+    "v4",
+    "serde"
+] }
+
 rand = "0.10.0"
 hex = "0.4"
-axum-macros = "0.5.0"
+
 validator = { version = "0.16", features = ["derive"] }
-tower = { version = "0.4", features = ["util"] }
-axum-extra = { version = "0.10", features = ["typed-header", "multipart"] }
-headers = "0.4"
-sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
+
+sqlx = { version = "0.7", features = [
+    "runtime-tokio-native-tls",
+    "postgres",
+    "chrono",
+    "uuid"
+] }
+
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "json"
+] }
+
 tracing-appender = "0.2.5"
-multipart = "0.18.0"
-mime_guess = "2.0.5"
-blake3 = "1.8.5"
+
 thiserror = "2.0.18"
 image = "0.24"
-sha2 = "0.10"
 
-# [profile.dev]
-# rustflags = ["-A", "warnings"]
 
-# [profile.release]
-# rustflags = ["-A", "warnings"]
+md5 = "0.7"
+
+blake3 = "1.8.5"
 
 [profile.dev]
 opt-level = 0

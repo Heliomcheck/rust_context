@@ -4,6 +4,7 @@ use anyhow::{Context, Ok};
 use chrono::{DateTime, Utc};
 
 use crate::structs::User;
+use sqlx::{PgPool, Row};
 
 
 pub async fn create_pool(database_url: &str) -> Result<PgPool, anyhow::Error> {
@@ -330,6 +331,93 @@ pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, anyhow::Error> {
     Ok(users)
 }
 
+pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
+    PgPool::connect(database_url).await
+}
+
+pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
+    PgPool::connect(database_url).await
+}
+pub async fn create_user_db(
+    pool: &PgPool,
+    username: &str,
+    email: &str,
+    name: &str,
+    birthday: &Option<String>,
+    avatar_url: &Option<String>,
+    description: &Option<String>,
+) -> Result<i64, sqlx::Error> {
+
+    let row = sqlx::query(
+        r#"
+        INSERT INTO users
+        (username, email, name, birthday, avatar_url, description_profile)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING user_id
+        "#
+    )
+    .bind(username)
+    .bind(email)
+    .bind(name)
+    .bind(birthday)
+    .bind(avatar_url)
+    .bind(description)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.get("user_id"))
+}
+pub async fn load_all_users(
+    pool: &PgPool
+) -> Result<Vec<User>, sqlx::Error> {
+
+    let users = sqlx::query_as::<_, User>(
+        r#"
+        SELECT *
+        FROM users
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(users)
+}
+pub async fn find_user_by_email(
+    pool: &PgPool,
+    email: &str
+) -> Result<Option<User>, sqlx::Error> {
+
+    let user = sqlx::query_as::<_, User>(
+        r#"
+        SELECT *
+        FROM users
+        WHERE email = $1
+        "#
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(user)
+}
+pub async fn find_user_by_username(
+    pool: &PgPool,
+    username: &str
+) -> Result<Option<User>, sqlx::Error> {
+
+    let user = sqlx::query_as::<_, User>(
+        r#"
+        SELECT *
+        FROM users
+        WHERE username = $1
+        "#
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(user)
+}
 #[cfg(test)]
 mod tests {
     use crate::generator;

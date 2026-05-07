@@ -35,6 +35,31 @@ use crate::{
     secrets::verification::VerificationStore,
     data_base::user_db::*
 };
+use axum::{
+    Json,
+    extract::State,
+};
+
+use std::sync::Arc;
+
+use serde_json::json;
+
+use crate::AppState;
+
+pub async fn get_user_data_handler(
+    State(_state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+
+    Json(json!({
+        "success": true
+    }))
+}
+
+pub async fn user_edit_handler() {}
+
+pub async fn upload_avatar_handler() {}
+
+pub async fn get_avatar_handler() {}
 
 pub async fn user_edit_handler(
         auth: TypedHeader<Authorization<Bearer>>,

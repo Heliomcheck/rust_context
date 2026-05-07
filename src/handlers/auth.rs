@@ -30,6 +30,24 @@ use crate::{
 };
 
 use crate::test_utils::*;
+use axum::{
+    Json,
+    extract::State,
+    http::StatusCode,
+};
+
+use std::sync::Arc;
+
+use serde_json::json;
+
+use validator::Validate;
+
+use crate::{
+    AppState,
+    models::*,
+    mail::send_mail_verif_code,
+    data_base::user_db::*,
+};
 
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
@@ -257,6 +275,131 @@ pub async fn logout_handler(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })))
         }
     }
+}
+pub async fn request_code_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CodeRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+
+    if let Err(errors) = payload.validate() {
+        return Err(validation_errors_to_response(errors));
+    }
+
+    send_mail_verif_code(&payload.email, state)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": e.to_string()
+                }))
+            )
+        })?;
+
+    Ok(Json(json!({
+        "success": true
+    })))
+}
+
+pub async fn verify_code_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VerifyCodeRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+
+    if let Err(errors) = payload.validate() {
+        return Err(validation_errors_to_response(errors));
+    }
+
+    let mut store = state.verification_store.lock().await;
+
+    let verified = store.verify(
+        &payload.email,
+        &payload.code
+    );
+
+    if !verified {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "Invalid code"
+            }))
+        ));
+    }
+
+    let existing_user = find_user_by_email(
+        &state.db_pool,
+        &payload.email
+    )
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Database error"
+            }))
+        )
+    })?;
+
+    Ok(Json(json!({
+        "success": true,
+        "is_new_user": existing_user.is_none()
+    })))
+}
+pub async fn register_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RegisterRequestWrapper>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+
+    let user = payload.user;
+
+    if let Err(errors) = user.validate() {
+        return Err(validation_errors_to_response(errors));
+    }
+
+    let exists = find_user_by_email(
+        &state.db_pool,
+        &user.email
+    )
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error":"db"}))
+        )
+    })?;
+
+    if exists.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": "User already exists"
+            }))
+        ));
+    }
+
+    let user_id = create_user_db(
+        &state.db_pool,
+        &user.username,
+        &user.email,
+        &user.display_name,
+        &user.birthday,
+        &None,
+        &user.description,
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": e.to_string()
+            }))
+        )
+    })?;
+
+    Ok(Json(json!({
+        "success": true,
+        "user_id": user_id
+    })))
 }
 
 //test

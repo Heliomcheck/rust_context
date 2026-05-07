@@ -1,7 +1,7 @@
 use chrono::{Utc, DateTime};
 
 use crate::generator::Generator;
-
+use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct TokenStore {
     pub id: u64,
@@ -31,5 +31,30 @@ impl TokenStore {
             return false;
         }
         self.token == input_token
+    }
+}
+
+#[derive(Default)]
+pub struct TokenStore {
+    tokens: HashMap<String, i64>,
+}
+
+impl TokenStore {
+    pub fn new() -> Self {
+        Self {
+            tokens: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, token: String, user_id: i64) {
+        self.tokens.insert(token, user_id);
+    }
+
+    pub fn validate(&self, token: &str) -> Option<i64> {
+        self.tokens.get(token).copied()
+    }
+
+    pub fn remove(&mut self, token: &str) {
+        self.tokens.remove(token);
     }
 }
