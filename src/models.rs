@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
 use axum::http::StatusCode;
 use axum::Json;
+use crate::Events;
 
 pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, Json<Value>) {
     let mut error_map = serde_json::Map::new();
@@ -119,4 +120,25 @@ pub struct CreateEventResponse {
     pub createdBy: String,
     pub createdAt: String,
     pub status: String
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreatePollRequest {
+    pub event_id: i64,
+    pub question: String,
+    pub options: Vec<String>,
+    pub more_than_one_vote: bool
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GetEventRequest {
+    pub event_id: i64,
+} 
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GetEventResponse {
+    pub event_id: i64,
+    pub invite_url: Option<String>,
+    pub members: Vec<(String, i64)>,
+    pub permissions: String
 }

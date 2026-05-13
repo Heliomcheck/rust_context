@@ -21,6 +21,8 @@ pub(crate) mod test_utils;
 pub(crate) mod errors;
 
 pub(crate) mod structs;
+pub(crate) mod plainning_modules;
+pub(crate) mod permissions;
 
 use structs::*;
 use context::*;
@@ -32,7 +34,7 @@ use crate::{
     handlers::event::*,
     secrets::token::TokenStore,
     secrets::verification::VerificationStore,
-    data_base::user_db::create_pool
+    data_base::user_db::create_pool,
 };
 
 async fn health_handler() -> &'static str {
@@ -97,9 +99,13 @@ async fn main() -> Result<(), anyhow::Error> {
     // OK POST /user/avatar {token: ""} and avatar -> {"avatar_url" : "avatar_url"}
     // OK GET /avatars/:avatar_uuid.jpg {"token": "token"} -> avatar through multipart
 
-    // продумать аватарки под etag
-    // переделать функции под кэш
-    // 
+
+    // OK POST /events {token: "", event: {title: "Event title", description: "Event description", startDateTime: "2024-01-01T12:00:00Z", endDateTime: "2024-01-01T14:00:00Z", color: "blue"}} -> {event_id: ""} or {error: "reason"}
+    // OK GET /events/{event_id} {token: ""} -> {event: {id: 1, title: "Event title", description: "Event description", startDateTime: "2024-01-01T12:00:00Z", endDateTime: "2024-01-01T14:00:00Z", event_token: ""}} or {error: "reason"}
+    // OK POST /events/create_poll {token: "", event_id: 1, question: "Question?", options: ["Option 1", "Option 2"], more_than_one_vote: false} -> {poll_id: 1} or {error: "reason"}
+    // OK GET /events/{event_id}/polls {token: ""} -> {polls: [{poll_id: 1, question: "Question?", options: [{id: 1, text: "Option 1", votes: 10}]}]} or {error: "reason"}
+    // OK POST /events/add_member {event_token: "", user_id: "", permissions: ""} -> {success: "true"} or {error: "reason"}
+    //
     // user_id добавить как отправку пользователю
     let listner = TcpListener::bind(args[1].as_str()).await
         .context("Can't bind to address")?;

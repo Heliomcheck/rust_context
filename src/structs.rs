@@ -29,6 +29,7 @@ pub struct ChatMessage {
 // }
 
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Events {
     pub event_name: String,
     pub event_id: i64,
@@ -102,4 +103,20 @@ pub struct AppState {
     pub user_store: Arc<Mutex<UserStore>>,
     pub verification_store: Arc<Mutex<VerificationStore>>,
     pub db_pool: PgPool
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Poll {
+    pub poll_id: i64,
+    pub question: String,
+    pub created_by: i64,
+    pub created_at: Option<DateTime<Utc>>,
+    pub is_active: bool,
+    pub more_than_one_vote: bool
+}
+
+#[derive(Debug, Serialize)]
+pub struct EventParticipant {
+    pub user_id: i64,
+    pub username: String
 }

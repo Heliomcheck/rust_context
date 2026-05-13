@@ -20,6 +20,8 @@ pub enum AppError {
     Internal(String),
     #[error("Invalid request")]
     BadRequest(String),
+    #[error("User is not member")]
+    UserNotInEvent(String)
 }
 
 impl IntoResponse for AppError {
@@ -32,7 +34,8 @@ impl IntoResponse for AppError {
             AppError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token".to_string()),
             AppError::DbError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg)
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::UserNotInEvent(msg) => (StatusCode::FORBIDDEN, msg)
         };
         (status, Json(json!({ "error": msg }))).into_response()
     }
