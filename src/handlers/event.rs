@@ -480,7 +480,7 @@ pub async fn delete_poll_handler(
 
 
 pub async fn get_event_polls_handler(
-  State(state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
     Json(payload): Json<CreatePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
