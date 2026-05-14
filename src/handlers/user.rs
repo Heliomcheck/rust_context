@@ -36,6 +36,22 @@ use crate::{
     data_base::user_db::*
 };
 
+
+#[utoipa::path(
+    post,
+    path = "/user/edit",
+    tag = "User",
+    request_body = EditUserRequest,
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "User updated successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn user_edit_handler(
         auth: TypedHeader<Authorization<Bearer>>,
         State(state): State<Arc<AppState>>,
@@ -51,11 +67,11 @@ pub async fn user_edit_handler(
         Ok(Some(user)) => user,
         Ok(None) => {
             tracing::error!("User not found");
-            return (StatusCode::UNAUTHORIZED, Json(json!({ "success": false, "error": "User not found" })));
+            return (StatusCode::UNAUTHORIZED, Json(json!({"error": "User not found"})));
         }
         Err(e) => {
             tracing::error!("Token validation error: {}", e);
-            return (StatusCode::UNAUTHORIZED, Json(json!({ "success": false, "error": "Invalid session" })));
+            return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Invalid session"})));
         }
     };
     
@@ -70,20 +86,33 @@ pub async fn user_edit_handler(
         payload.descripion.as_deref()
     ).await {
         tracing::error!("Failed to update user: {}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": "Failed to update user" })));
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to update user"})));
     }
     // update user data un UserStore in future
     
     (StatusCode::OK, Json(json!({ "success": true })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/get_data",
+    tag = "User",
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Get user data successfully", body = UserDataResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_user_data_handler(
     auth: TypedHeader<Authorization<Bearer>>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let token = auth.token();
     
-    // 1. Находим пользователя по токену
     let user = match find_user_by_token(&state.db_pool, token).await {
         Ok(Some(u)) => u,
         Ok(None) => {
@@ -95,25 +124,33 @@ pub async fn get_user_data_handler(
         }
     };
     
-    // 2. Формируем ответ
     let response = UserDataResponse {
         id: user.user_id,
-        username: user.username.clone(),  // ← clone()
-        email: user.email.clone(),        // ← clone()
-        name: user.display_name.clone(),          // ← clone()
+        username: user.username.clone(),
+        email: user.email.clone(),
+        name: user.display_name.clone(),
         birthday: user.birthday.clone()
     };
     
-    (StatusCode::OK, Json(json!({"user":{
-        "username": user.username,
-        "email": user.email,
-        "display_name": user.display_name,
-        "birthday": user.birthday
-    }})))
+    (StatusCode::OK, Json(json!({"user": response})))
 }
 
 const UPLOAD_DIR: &str = "uploads/avatars";
-
+#[utoipa::path(
+    post,
+    path = "/user/upload_avatar",
+    tag = "User",
+    request_body = Multipart,
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Avatar uploaded successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn upload_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
@@ -178,7 +215,6 @@ pub async fn upload_avatar_handler(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to save file" })));
         }
         
-        // Обновляем avatar_url в БД
         let avatar_url = format!("/user/avatar");
         if let Err(e) = update_user_avatar(&state.db_pool, user.user_id, &avatar_url).await {
             error!("Failed to update avatar URL: {}", e);
@@ -191,6 +227,22 @@ pub async fn upload_avatar_handler(
     (StatusCode::BAD_REQUEST, Json(json!({ "error": "No file provided" })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/avatars/{file_name}",
+    tag = "Avatar",
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Get avatar successfully", body = mime_guess::Mime),
+        (status = 304, description = "Not modified - avatar not changed", body = EmptyResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
+        (status = 404, description = "Avatar not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_avatar_handler(
     headers: HeaderMap,
     Path(user_id): Path<i64>,
@@ -206,7 +258,7 @@ pub async fn get_avatar_handler(
     let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
     
     if !user_dir.exists() {
-        return (StatusCode::NOT_FOUND, "Avatar not found").into_response();
+        return (StatusCode::NOT_FOUND, Json(json!({ "error": "Avatar not found" }))).into_response();
     }
     
     let mut avatar_path = None; // find avatar.*
@@ -222,7 +274,7 @@ pub async fn get_avatar_handler(
     
     let path = match avatar_path {
         Some(p) => p,
-        None => return (StatusCode::NOT_FOUND, "Avatar not found").into_response(),
+        None => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Avatar not found" }))).into_response(),
     };
     
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
@@ -235,7 +287,7 @@ pub async fn get_avatar_handler(
         ).into_response(),
         Err(e) => {
             error!("Failed to read file: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to read file" }))).into_response()
         }
     }
 }

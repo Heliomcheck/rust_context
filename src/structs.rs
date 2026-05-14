@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::option::Option;
 use sqlx::PgPool;
+use utoipa::{ToSchema};
 
 use crate::{
     user_store::UserStore,
@@ -14,7 +15,7 @@ use crate::{
     permissions::*,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChatMessage {
     pub username: String,
     pub text: String,
@@ -31,7 +32,7 @@ pub struct ChatMessage {
 // }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Events {
     pub event_name: String,
     pub event_id: i64,
@@ -44,7 +45,7 @@ pub struct Events {
     pub status_id: i16
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, ToSchema)]
 pub struct User {
     pub user_id: i64,
     pub display_name: String,
@@ -107,7 +108,7 @@ pub struct AppState {
     pub db_pool: PgPool
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Poll {
     pub poll_id: i64,
     pub question: String,
@@ -117,12 +118,13 @@ pub struct Poll {
     pub more_than_one_vote: bool
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EventParticipant {
     pub user_id: i64,
     pub username: String
 }
 
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EventUser {
     pub user_id: i64,
     pub event_id: i64,

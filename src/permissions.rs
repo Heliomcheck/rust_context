@@ -24,6 +24,10 @@ impl EventPermissions {
         Self { bits: Self::ALL }
     }
 
+    pub fn get_bits(&self) -> i32 {
+        self.bits
+    }
+
     pub const INVITE: i32 = 1 << 0;
     pub const UPDATE_PERMISSIONS: i32 = 1 << 1;
     pub const DELETE_MEMBER: i32 = 1 << 2;

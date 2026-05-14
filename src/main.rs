@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use utoipa_swagger_ui::SwaggerUi;
+use utoipa::OpenApi;
 
 mod context;
 
@@ -23,6 +25,7 @@ pub(crate) mod errors;
 pub(crate) mod structs;
 pub(crate) mod plainning_modules;
 pub(crate) mod permissions;
+pub(crate) mod api_doc;
 
 use structs::*;
 use context::*;
@@ -35,6 +38,7 @@ use crate::{
     secrets::token::TokenStore,
     secrets::verification::VerificationStore,
     data_base::user_db::create_pool,
+    api_doc::ApiDoc
 };
 
 async fn health_handler() -> &'static str {
@@ -67,13 +71,14 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let app = Router::new()
-        .route("/auth/request-code", routing::post(request_code_handler))
-        .route("/auth/verify-code", routing::post(verify_code_handler))
-        .route( "/auth/resend-code", routing::post(resend_code_handler))
+        .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .route("/auth/request_code", routing::post(request_code_handler))
+        .route("/auth/verify_code", routing::post(verify_code_handler))
+        .route( "/auth/resend_code", routing::post(resend_code_handler))
         .route("/auth/register", routing::post(register_handler))
-        .route("/auth/token-validate", routing::post(token_validate_handler))
+        .route("/auth/token_validate", routing::post(token_validate_handler))
         .route("/auth/logout", routing::post(logout_handler)) 
-        .route("/auth/check-username", routing::post(username_check_handler))
+        .route("/auth/check_username", routing::post(username_check_handler))
 
         .route("/user/edit", routing::post(user_edit_handler))
         .route("/user/get-data", routing::get(get_user_data_handler)) // user_id
@@ -86,6 +91,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         .route("/events", routing::post(create_event_handler))
         .route("/events_detailed", routing::get(get_detailed_event_handler))
+        //.route("/events/modules", routing::get(get_event_modules_handler))
         .route("/events/add_user", routing::post(add_user_to_event_handler))
         .route("/events/delete_user", routing::post(delete_user_from_event_handler))
         .route("/events/permissions", routing::put(update_user_permissions_handler))
@@ -98,11 +104,11 @@ async fn main() -> Result<(), anyhow::Error> {
         // .route("/events/update_task", routing::post(update_task_handler))
         .with_state(state);
 
-    // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
-    // OK POST /auth/resend-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
-    // OK POST /auth/verify-code {email: "test.example.com", code: "123456"} -> {is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
+    // OK POST /auth/request_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
+    // OK POST /auth/resend_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
+    // OK POST /auth/verify_code {email: "test.example.com", code: "123456"} -> {is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
     // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {token: ""} else {error: "reason"}
-    // OK POST /auth/token-validate {token: ""} -> {success: true} or {success: false, error: "reason"}
+    // OK POST /auth/token_validate {token: ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
     // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
     // OK POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}

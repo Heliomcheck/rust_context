@@ -1,8 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
-use axum::http::StatusCode;
+use axum::{http::StatusCode, response::sse::Event};
 use axum::Json;
+use utoipa::{openapi, ToSchema};
+
+use crate::{
+    structs::*,
+    permissions::*,
+};
 
 pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, Json<Value>) {
     let mut error_map = serde_json::Map::new();
@@ -26,7 +32,7 @@ pub struct RegisterRequestWrapper {
     pub user: RegisterRequest,
 }
 
-#[derive(Deserialize, Serialize, Validate)]
+#[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct RegisterRequest {
     #[validate(email(
         message = "Email format invalid"))]
@@ -45,14 +51,14 @@ pub struct RegisterRequest {
     pub description: Option<String>
 }
 
-#[derive(Deserialize, Serialize, Validate)]
+#[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct CodeRequest {
     #[validate(email(
         message = "Email format invalid"))]
     pub email: String
 }
 
-#[derive(Deserialize, Serialize, Validate)]
+#[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct VerifyCodeRequest {
     #[validate(email(
         message = "Email format invalid"))]
@@ -62,13 +68,13 @@ pub struct VerifyCodeRequest {
     pub code: String
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CheckUsernameRequest {
     #[validate(length(min = 3, message = "Username must be at least 3 characters"))]
     pub username: String,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct EditUserRequest {
     #[validate(length(min = 5, max = 30,
         message = "Username length must be more than 4 characters"))]
@@ -88,7 +94,7 @@ pub struct EditUserRequest {
     pub descripion: Option<String>
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UserDataResponse {
     pub id: i64,
     pub username: String,
@@ -97,7 +103,7 @@ pub struct UserDataResponse {
     pub birthday: Option<String>
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateEventRequest {
     pub title: String,
     pub location: Option<String>,
@@ -107,7 +113,7 @@ pub struct CreateEventRequest {
     pub color: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateEventResponse {
     pub id: String,
     pub title: String,
@@ -121,7 +127,7 @@ pub struct CreateEventResponse {
     pub status: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreatePollRequest {
     pub event_id: i64,
     pub question: String,
@@ -129,36 +135,46 @@ pub struct CreatePollRequest {
     pub more_than_one_vote: bool
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UpdatePollRequest {
     pub event_id: i64,
     pub poll_id: i64,
     pub question: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventRequest {
     pub event_id: i64,
 } 
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventResponse {
-    pub event_id: i64,
+    pub event: Events,
     pub invite_url: Option<String>,
     pub members: Vec<(String, i64)>,
     pub permissions: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UpdateUserPermissionsRequest {
     pub event_id: i64,
     pub user_id: i64,
     pub new_permissions: i32
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct InviteUserToEventRequest {
     pub event_id: i64,
     pub user_id: i64,
     pub permissions: i32
 }
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct SuccessResponse {
+    pub message: bool
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String
+}    

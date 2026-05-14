@@ -31,6 +31,20 @@ use crate::{
 
 use crate::test_utils::*;
 
+
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    tag = "Auth",
+    request_body = RegisterRequestWrapper,
+    responses(
+        (status = 201, description = "User registered", body = RegisterRequestWrapper),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 404, description = "User or event not found", body = ErrorResponse),
+        (status = 409, description = "Conflict - email or username already exists", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(wrapper): Json<RegisterRequestWrapper>,
@@ -110,6 +124,17 @@ pub async fn register_handler(
     (StatusCode::CREATED, Json(json!({ "token": token_str, "userId": user_id})))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/request_code",
+    tag = "Auth",
+    request_body = CodeRequest,
+    responses(
+        (status = 201, description = "Code sent", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn request_code_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CodeRequest>
@@ -124,11 +149,23 @@ pub async fn request_code_handler(
         Err(e) => {
             print!("{e}");
             (StatusCode::INTERNAL_SERVER_ERROR, 
-                Json(json!({"success": false, "error": format!("Failed to send verification code: {e}")})))
+                Json(json!({"error": format!("Failed to send verification code: {e}")})))
             }
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/verify_code",
+    tag = "Auth",
+    request_body = VerifyCodeRequest,
+    responses(
+        (status = 200, description = "User verified(not new)", body = SuccessResponse),
+        (status = 201, description = "User verified(new user)", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn verify_code_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VerifyCodeRequest>
@@ -174,9 +211,22 @@ pub async fn verify_code_handler(
     (StatusCode::OK, Json(json!({ "isNewUser": false, "token": token, "userId": user.user_id })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/token_validate",
+    tag = "Auth",
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Token is valid", body = SuccessResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn token_validate_handler(
+    State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    State(state): State<Arc<AppState>>
 ) -> impl IntoResponse {
 
     let token = auth.token();
@@ -187,6 +237,17 @@ pub async fn token_validate_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/check_username",
+    tag = "Auth",
+    request_body = CheckUsernameRequest,
+    responses(
+        (status = 200, description = "Username is available", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn username_check_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CheckUsernameRequest>
@@ -200,13 +261,25 @@ pub async fn username_check_handler(
         Ok(None) => false,
         Err(e) => {
             error!("DB error: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": format!("Database error: {}", e) })));
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Database error: {}", e) })));
         }
     };
 
-    (StatusCode::OK, Json(json!({ "available": !exists })))
+    (StatusCode::OK, Json(json!({ "success": !exists })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/resend_code",
+    tag = "Auth",
+    request_body = CodeRequest,
+    responses(
+        (status = 200, description = "Code resent successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 429, description = "Too many requests - rate limit exceeded", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn resend_code_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CodeRequest>
@@ -216,20 +289,25 @@ pub async fn resend_code_handler(
     }
 
     match send_mail_verif_code(&payload.email, state).await {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(json!({ "success": true, "message": "Code resent" }))
-        ),
-        Err(e) => (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({
-                "success": false,
-                "error": e.to_string()
-            }))
-        )
+        Ok(()) => (StatusCode::OK, Json(json!({ "success": true}))),
+        Err(e) => (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error": e.to_string()})))
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    tag = "Auth",
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Logged out successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn logout_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
@@ -241,7 +319,7 @@ pub async fn logout_handler(
             match deactivate_token(&state.db_pool, token).await {
                 Ok(_) => {
                     tracing::info!("User {} logged out", user.user_id);
-                    (StatusCode::OK, Json(json!({ "success": true })))
+                    (StatusCode::OK, Json(json!({"success": true})))
                 }
                 Err(e) => {
                     tracing::error!("Failed to deactivate token: {}", e);

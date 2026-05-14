@@ -1,13 +1,12 @@
 [package]
 name = "rust_context"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
-axum = { version = "0.8.8", features = ["ws"]}
-axum-auth = "0.8.1"
+axum = { version = "0.7", features = ["ws"]}
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
 futures-util = "0.3"
@@ -15,23 +14,23 @@ futures-macro = "=0.3.32"
 dotenvy = "0.15.7"
 lettre = {version = "0.11.20", features = ["smtp-transport", "tokio1-native-tls", "builder"]}
 uuid = { version = "1.23.0", features = ["v4"] }
-rand = "0.10.0"
+rand = "0.10.1"
 hex = "0.4"
-axum-macros = "0.5.0"
+axum-macros = "0.4"
 validator = { version = "0.16", features = ["derive"] }
 tower = { version = "0.4", features = ["util"] }
-axum-extra = { version = "0.10", features = ["typed-header", "multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header", "multipart"] }
 headers = "0.4"
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
-multipart = "0.18.0"
 mime_guess = "2.0.5"
 blake3 = "1.8.5"
 thiserror = "2.0.18"
-axum-debug = "0.3.3"
+utoipa = { version = "4", features = ["axum_extras", "chrono"] }
+utoipa-swagger-ui = { version = "6", features = ["axum"] }
 
 
 # [profile.dev]
