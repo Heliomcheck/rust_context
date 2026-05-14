@@ -3,7 +3,6 @@ use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
 use axum::http::StatusCode;
 use axum::Json;
-use crate::Events;
 
 pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, Json<Value>) {
     let mut error_map = serde_json::Map::new();
@@ -103,8 +102,8 @@ pub struct CreateEventRequest {
     pub title: String,
     pub location: Option<String>,
     pub description: Option<String>,
-    pub startDateTime: Option<String>,
-    pub endDateTime: Option<String>,
+    pub start_date_time: Option<String>,
+    pub end_date_time: Option<String>,
     pub color: String
 }
 
@@ -114,11 +113,11 @@ pub struct CreateEventResponse {
     pub title: String,
     pub description: Option<String>,
     pub location: Option<String>,
-    pub startDateTime: Option<String>, 
-    pub endDateTime: Option<String>,
+    pub start_date_time: Option<String>, 
+    pub end_date_time: Option<String>,
     pub color: String, 
-    pub createdBy: String,
-    pub createdAt: String,
+    pub created_by: String,
+    pub created_at: String,
     pub status: String
 }
 
@@ -128,6 +127,13 @@ pub struct CreatePollRequest {
     pub question: String,
     pub options: Vec<String>,
     pub more_than_one_vote: bool
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdatePollRequest {
+    pub event_id: i64,
+    pub poll_id: i64,
+    pub question: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -141,4 +147,18 @@ pub struct GetEventResponse {
     pub invite_url: Option<String>,
     pub members: Vec<(String, i64)>,
     pub permissions: String
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateUserPermissionsRequest {
+    pub event_id: i64,
+    pub user_id: i64,
+    pub new_permissions: i32
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InviteUserToEventRequest {
+    pub event_id: i64,
+    pub user_id: i64,
+    pub permissions: i32
 }

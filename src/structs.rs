@@ -7,10 +7,12 @@ use std::sync::Arc;
 use std::option::Option;
 use sqlx::PgPool;
 
-use crate::user_store::UserStore;
-
-use crate::secrets::verification::VerificationStore;
-use crate::models::EditUserRequest;
+use crate::{
+    user_store::UserStore,
+    secrets::verification::VerificationStore,
+    models::EditUserRequest,
+    permissions::*,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -119,4 +121,11 @@ pub struct Poll {
 pub struct EventParticipant {
     pub user_id: i64,
     pub username: String
+}
+
+pub struct EventUser {
+    pub user_id: i64,
+    pub event_id: i64,
+    pub permissions: EventPermissions,
+    pub joined_at: DateTime<Utc>,
 }

@@ -5,15 +5,9 @@ use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoRes
         };
 use axum::extract::State;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use axum::Json;
-use validator::Validate;
 use axum::http::StatusCode;
 use serde_json::json;
-use axum::body::Body;
-use axum::http::Request;
-use tower::util::ServiceExt;
-use std::collections::HashMap;
 use std::result::Result;
 use axum_extra::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
@@ -43,14 +37,14 @@ pub async fn create_event_handler(
     let user = find_user_by_token(&state.db_pool, auth.token()).await?
         .ok_or(AppError::UserNotFound)?;
 
-    let start_date = match payload.startDateTime {
+    let start_date = match payload.start_date_time {
         Some(ref s) => {
             let dt = s.parse::<DateTime<Utc>>().map_err(|_| AppError::BadRequest("Invalid start date format. Use ISO 8601".to_string()))?;
             Some(dt)
         }
         None => None,
     };
-    let end_date = match payload.endDateTime {
+    let end_date = match payload.end_date_time{
         Some(ref s) => {
             let dt = s.parse::<DateTime<Utc>>().map_err(|_| AppError::BadRequest("Invalid end date format. Use ISO 8601".to_string()))?;
             
@@ -68,22 +62,22 @@ pub async fn create_event_handler(
         payload.color, 
     ).await?;
 
-    let _ = add_member(&state.db_pool, user.user_id, event_id, 1, 2).await?;
+    let _ = add_member(&state.db_pool, user.user_id, event_id, EventPermissions::OWNER, 2).await?;
 
     let event = get_event_by_id(&state.db_pool, event_id).await?;
     
-    let created_by = get_event_owner_id(&state.db_pool, event_id).await?;
+    let created_by = check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await?;
 
     let event_response = CreateEventResponse {
         id: event.event_id.to_string(),
         title: event.event_name,
         description: event.description_event,
         location: Some("test".to_string()),
-        startDateTime: event.start_date.map(|dt| dt.to_rfc3339()),
-        endDateTime: event.end_date.map(|dt| dt.to_rfc3339()),
+        start_date_time: event.start_date.map(|dt| dt.to_rfc3339()),
+        end_date_time: event.end_date.map(|dt| dt.to_rfc3339()),
         color: event.color,
-        createdBy: created_by.to_string(), 
-        createdAt: event.created_at.to_rfc3339(),
+        created_by: created_by.to_string(), 
+        created_at: event.created_at.to_rfc3339(),
         status: event.is_active.to_string()
     };
 
@@ -125,14 +119,97 @@ pub async fn get_detailed_event_handler(
 
     let users = get_users_in_event(&state.db_pool, event.event_id).await?;
 
-    let user_permissions = check_user_permissions(&state.db_pool, &event, &user, 0).await?;// number is a index of permissions
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::MEMBER).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
+        Err(e) => return Err(e),
+    };
 
+    let user_permissions = get_user_permissions(&state.db_pool, event.event_id, user.user_id).await?;
     Ok((StatusCode::OK, Json(json!({
         "event": event, 
         "invite_url": invite_url, 
         "users": users, 
         "user_permission": user_permissions
     }))))
+}
+
+pub async fn add_user_to_event_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<InviteUserToEventRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::INVITE).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
+        Err(e) => return Err(e),
+    };
+    let _ = add_member(&state.db_pool, user.user_id, event.event_id, payload.permissions, 2).await?;
+
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+}
+
+pub async fn delete_user_from_event_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<GetEventResponse>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::DELETE_MEMBER).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to delete member".to_string())),
+        Err(e) => return Err(e),
+    };
+    let _ = remove_member(&state.db_pool, user.user_id, event.event_id).await?;
+
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+}
+
+pub async fn update_user_permissions_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<UpdateUserPermissionsRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_PERMISSIONS).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Err(e) => return Err(e),
+    };
+
+    let _ = update_user_permissions(&state.db_pool, event.event_id, user.user_id, payload.new_permissions).await?;
+
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }
 
 // Plainning module handlers
@@ -146,8 +223,17 @@ pub async fn create_poll_handler(
         Some(u) => u,
         None => return Err(AppError::UserNotFound),
     };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
 
-    let _ = get_event_by_id(&state.db_pool, payload.event_id).await?;
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::CREATE_MODULE).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Err(e) => return Err(e),
+    };
     // let max_allowed = get_count_of_options(&state.db_pool, payload.event_id).await?;
 
     // if (payload.options.len() as i64) > max_allowed {
@@ -165,6 +251,62 @@ pub async fn create_poll_handler(
 
 
     Ok((StatusCode::CREATED, Json(json!({"poll_id": poll_id}))))
+}
+
+pub async fn update_poll_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<UpdatePollRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Err(e) => return Err(e),
+    };
+
+    let updated = edit_pool_question(&state.db_pool, payload.poll_id, payload.question).await?;
+    if !updated {
+        return Err(AppError::BadRequest("Poll not found".to_string()));
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+}
+
+pub async fn delete_poll_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<CreatePollRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Err(e) => return Err(e),
+    };
+
+    let deleted = delete_poll(&state.db_pool, payload.event_id).await?;
+    if !deleted {
+        return Err(AppError::BadRequest("Poll not found".to_string()));
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }
 
 pub async fn get_event_polls_handler(

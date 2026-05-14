@@ -85,6 +85,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
+        .route("/events_detailed", routing::get(get_detailed_event_handler))
+        .route("/events/add_user", routing::post(add_user_to_event_handler))
+        .route("/events/delete_user", routing::post(delete_user_from_event_handler))
+        .route("/events/permissions", routing::put(update_user_permissions_handler))
+        .route("/events/create_poll", routing::post(create_poll_handler))
+        .route("/events/update_poll", routing::post(update_poll_handler))
+        .route("/events/delete_poll", routing::post(delete_poll_handler))
+        // .route("/events/create_item", routing::post(create_item_handler))
+        // .route("/events/update_item", routing::post(update_item_handler))
+        // .route("/events/create_task", routing::post(create_task_handler))
+        // .route("/events/update_task", routing::post(update_task_handler))
         .with_state(state);
 
     // OK POST /auth/request-code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}

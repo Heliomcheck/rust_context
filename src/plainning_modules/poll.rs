@@ -155,8 +155,8 @@ pub async fn get_event_polls(
             is_active,
             more_than_one_vote
         FROM poll
-        WHERE event_id = $1
-        ORDER BY is_active DESC, created_at DESC
+        WHERE event_id = $1 AND is_active = true
+        ORDER BY created_at DESC
         "#,
         event_id
     )

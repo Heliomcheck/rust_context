@@ -190,26 +190,28 @@ pub async fn check_user_in_event(
         return Ok(false)
     }
 }
-// pub async fn get_event_members(
-//     pool: &PgPool,
-//     event_id: i64,
-// ) -> Result<Vec<(i64, String, i16, i16, DateTime<Utc>)>, AppError> {
-//     let rows = sqlx::query!(
-//         r#"
-//         SELECT u.user_id, u.username, eu.role_id, eu.status_id, eu.joined_at
-//         FROM event_user eu
-//         JOIN users u ON eu.user_id = u.user_id
-//         WHERE eu.event_id = $1
-//         ORDER BY eu.joined_at ASC
-//         "#,
-//         event_id
-//     )
-//     .fetch_all(pool)
-//     .await?;
 
-//     Ok(rows.into_iter().map(|r| (r.user_id, r.username, r.role_id, r.status_id, 
-//         r.joined_at.unwrap())).collect())
-// }
+pub async fn get_event_members(
+    pool: &PgPool,
+    event_id: i64,
+) -> Result<Vec<(i64, String, i32, i16, DateTime<Utc>)>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT u.user_id, u.username, eu.permissions, eu.status_id, eu.joined_at
+        FROM event_user eu
+        JOIN users u ON eu.user_id = u.user_id
+        WHERE eu.event_id = $1
+        ORDER BY eu.joined_at ASC
+        "#,
+        event_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+
+     Ok(rows.into_iter().map(|r| (r.user_id, r.username, r.permissions, r.status_id, 
+         r.joined_at.unwrap())).collect())
+}
 
 pub async fn update_event(
     pool: &PgPool,
@@ -264,50 +266,54 @@ pub async fn update_event_status(
     Ok(())
 }
 
-// pub async fn get_event_owner_id(
-//     pool: &PgPool,
-//     event_id: i64,
-// ) -> Result<i64, AppError> {
-//     let row = sqlx::query!(
-//         r#"
-//         SELECT user_id
-//         FROM event_user
-//         WHERE event_id = $1 AND role_id = 1
-//         "#,
-//         event_id
-//     )
-//     .fetch_one(pool)
-//     .await?;
 
-//     Ok(row.user_id)
-// }
+pub async fn find_users_by_permission(
+    pool: &PgPool,
+    event_id: i64,
+    required_permission: i32,
+) -> Result<Vec<i64>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT u.user_id
+        FROM users u
+        JOIN event_user eu ON u.user_id = eu.user_id
+        WHERE eu.event_id = $1 AND (eu.permissions & $2) != 0
+        "#,
+        event_id,
+        required_permission
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|row| row.user_id).collect())
+}
 
 // Members
 
-// pub async fn add_member(
-//     pool: &PgPool,
-//     user_id: i64,
-//     event_id: i64,
-//     role_id: i16,
-//     status_id: i16,
-// ) -> Result<(), AppError> {
-//     sqlx::query!(
-//         r#"
-//         INSERT INTO event_user (user_id, event_id, role_id, status_id)
-//         VALUES ($1, $2, $3, $4)
-//         ON CONFLICT (user_id, event_id) DO UPDATE
-//         SET role_id = $3, status_id = $4
-//         "#,
-//         user_id,
-//         event_id,
-//         role_id,
-//         status_id
-//     )
-//     .execute(pool)
-//     .await?;
+pub async fn add_member(
+    pool: &PgPool,
+    user_id: i64,
+    event_id: i64,
+    permissions: i32,
+    status_id: i16,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"
+        INSERT INTO event_user (user_id, event_id, permissions, status_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, event_id) DO UPDATE
+        SET permissions = $3, status_id = $4
+        "#,
+        user_id,
+        event_id,
+        permissions,
+        status_id
+    )
+    .execute(pool)
+    .await?;
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 pub async fn remove_member(
     pool: &PgPool,
@@ -328,27 +334,27 @@ pub async fn remove_member(
     Ok(())
 }
 
-// pub async fn update_member_role(
-//     pool: &PgPool,
-//     user_id: i64,
-//     event_id: i64,
-//     role_id: i16,
-// ) -> Result<(), AppError> {
-//     sqlx::query!(
-//         r#"
-//         UPDATE event_user
-//         SET role_id = $1
-//         WHERE user_id = $2 AND event_id = $3
-//         "#,
-//         role_id,
-//         user_id,
-//         event_id
-//     )
-//     .execute(pool)
-//     .await?;
+pub async fn update_member_role(
+    pool: &PgPool,
+    user_id: i64,
+    event_id: i64,
+    permissions: i32,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"
+        UPDATE event_user
+        SET permissions = $1
+        WHERE user_id = $2 AND event_id = $3
+        "#,
+        permissions,
+        user_id,
+        event_id
+    )
+    .execute(pool)
+    .await?;
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 pub async fn update_member_status(
     pool: &PgPool,
@@ -370,6 +376,29 @@ pub async fn update_member_status(
     .await?;
 
     Ok(())
+}
+
+pub async fn has_permission(
+    pool: &PgPool,
+    event_id: i64,
+    user_id: i64,
+    permission: i32,
+) -> Result<bool, AppError> {
+    let row = sqlx::query!(
+        r#"
+        SELECT (permissions & $1) != 0 as has_perm
+        FROM event_user
+        WHERE event_id = $2 AND user_id = $3
+        "#,
+        permission,
+        event_id,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .is_some();
+
+    Ok(row)
 }
 
 pub async fn create_event_token(
