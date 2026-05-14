@@ -30,22 +30,10 @@ use crate::{
 };
 
 use crate::test_utils::*;
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-};
-
-use std::sync::Arc;
-
-use serde_json::json;
-
-use validator::Validate;
 
 use crate::{
     AppState,
     models::*,
-    mail::send_mail_verif_code,
     data_base::user_db::*,
 };
 
@@ -174,7 +162,7 @@ pub async fn verify_code_handler(
     let token = match find_token_by_user_id(&state.db_pool, user.user_id).await {
         Ok(Some(t)) => t,
         Ok(None) => {
-            let new_token = uuid::Uuid::new_v4().to_string();
+            let new_token = generator::Generator::new_session_token();
             let expires_at = Utc::now() + chrono::Duration::days(30);
             
             if let Err(e) = create_token(&state.db_pool, user.user_id, &new_token, expires_at).await {

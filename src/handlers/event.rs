@@ -7,7 +7,6 @@ use axum::{
 use axum_extra::{TypedHeader, headers::Authorization};
 use headers::authorization::Bearer;
 use std::sync::Arc;
-use uuid::Uuid;
 use tokio::fs;
 use std::path::PathBuf;
 use chrono::{DateTime, Utc, NaiveDate, NaiveDateTime};
@@ -20,39 +19,36 @@ use crate::{
     data_base::{event_repo, user_db},
     AppState,
 };
-use axum::{
-    Json,
-};
 
 use serde_json::json;
+//заглушки для компиляции, пока не реализованы функции в event_repo
+// pub async fn create_event_handler() -> Json<serde_json::Value> {
+//     Json(json!({"success": true}))
+// }
 
-pub async fn create_event_handler() -> Json<serde_json::Value> {
-    Json(json!({"success": true}))
-}
+// pub async fn get_events_list_handler() -> Json<serde_json::Value> {
+//     Json(json!([]))
+// }
 
-pub async fn get_events_list_handler() -> Json<serde_json::Value> {
-    Json(json!([]))
-}
+// pub async fn get_event_handler() -> Json<serde_json::Value> {
+//     Json(json!({}))
+// }
 
-pub async fn get_event_handler() -> Json<serde_json::Value> {
-    Json(json!({}))
-}
+// pub async fn update_event_handler() -> Json<serde_json::Value> {
+//     Json(json!({}))
+// }
 
-pub async fn update_event_handler() -> Json<serde_json::Value> {
-    Json(json!({}))
-}
+// pub async fn change_status_handler() -> Json<serde_json::Value> {
+//     Json(json!({}))
+// }
 
-pub async fn change_status_handler() -> Json<serde_json::Value> {
-    Json(json!({}))
-}
+// pub async fn upload_event_avatar_handler() -> Json<serde_json::Value> {
+//     Json(json!({}))
+// }
 
-pub async fn upload_event_avatar_handler() -> Json<serde_json::Value> {
-    Json(json!({}))
-}
-
-pub async fn get_event_avatar_handler() -> Json<serde_json::Value> {
-    Json(json!({}))
-}
+// pub async fn get_event_avatar_handler() -> Json<serde_json::Value> {
+//     Json(json!({}))
+// }
 
 // Папка для аватарок событий
 const EVENT_AVATAR_DIR: &str = "event-avatars";

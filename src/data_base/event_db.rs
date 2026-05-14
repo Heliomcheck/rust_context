@@ -260,7 +260,7 @@ pub async fn create_event_token(
     event_id: i64,
     expires_in_hours: i64,
 ) -> Result<String> {
-    let token = uuid::Uuid::new_v4().to_string().replace("-", "");
+    let token = generator::Generator::new_session_token();
     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
     
     sqlx::query!(

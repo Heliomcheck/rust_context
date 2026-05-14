@@ -124,7 +124,7 @@ pub struct ChangeEventStatusRequest {
 
 #[derive(Debug, Serialize)]
 pub struct EventResponse {
-    pub id: Uuid,
+    pub id: i64,
     pub title: String,
     pub description: Option<String>,
     pub startDateTime: Option<String>,
