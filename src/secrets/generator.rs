@@ -20,3 +20,35 @@ impl Generator {
         hex::encode(bytes)
     }
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verification_code() {
+    let code = Generator::verification_code();
+
+    assert_eq!(code.len(), 6);
+    assert!(code.chars().all(|c| c.is_ascii_digit()));
+}
+
+    #[test]
+    fn test_new_session_token() {
+    let token1 = Generator::new_session_token();
+    let token2 = Generator::new_session_token();
+
+    assert_eq!(token1.len(), 32);
+    assert_eq!(token2.len(), 32);
+
+    assert_ne!(token1, token2);
+}
+
+    #[test]
+    fn test_api_token() {
+    let token = Generator::api_token();
+
+    assert_eq!(token.len(), 16);
+    assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+}
+} 

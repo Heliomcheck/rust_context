@@ -340,3 +340,83 @@ pub async fn get_event_polls_handler(
 // ) -> Result<impl IntoResponse, AppError> {
 //     Ok((StatusCode::CREATED, Json(json!({"status": "ok"}))))
 // }
+//test
+#[cfg(test)]
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_create_event_handler_unauthorized() {
+        let app = create_test_app().await;
+
+        let payload = json!({
+            "title": "Birthday Party",
+            "description": "Test event",
+            "start_date_time": null,
+            "end_date_time": null,
+            "color": 1
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/events")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer invalid_token")
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert!(response.status() == StatusCode::NOT_FOUND
+            || response.status() == StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_create_event_invalid_date() {
+        let app = create_test_app().await;
+
+        let state = app.state::<Arc<AppState>>().unwrap();
+
+        let token = create_test_user_and_token(&state.db_pool).await;
+
+        let payload = json!({
+            "title": "Birthday Party",
+            "description": "Test event",
+            "start_date_time": "invalid_date",
+            "end_date_time": null,
+            "color": 1
+        });
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/events")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", token))
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_events_handler() {
+        let app = create_test_app().await;
+
+        let state = app.state::<Arc<AppState>>().unwrap();
+
+        let token = create_test_user_and_token(&state.db_pool).await;
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/events/user")
+            .header("authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+}

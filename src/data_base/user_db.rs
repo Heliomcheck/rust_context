@@ -703,4 +703,26 @@ mod tests {
         
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_load_all_users() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let email = "loadall@mail.com";
+        create_user_db(
+            &pool,
+            "loadall",
+            email,
+            "Load All",
+            &None,
+            &None,
+            &Some("test".to_string())
+        )
+        .await?;
+
+        let users = load_all_users(&pool).await?;
+        assert!(!users.is_empty());
+        assert!(users.iter().any(|u| u.email == email));
+
+        Ok(())
+    }
 }
