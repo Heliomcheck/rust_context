@@ -27,3 +27,9 @@ rust_context ip:port
 ```bash
 cargo test -- --test-threads=1
 ```
+
+## Documentation
+```bash
+rust_context 127.0.0.1:8080
+#url: http://localhost:8080/swagger_ui/
+```

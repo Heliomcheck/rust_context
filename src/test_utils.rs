@@ -58,3 +58,15 @@ pub async fn clear_db(pool: &PgPool) {
     let _ = pool.execute("ALTER TABLE IF EXISTS events ENABLE TRIGGER ALL").await;
     let _ = pool.execute("ALTER TABLE IF EXISTS users ENABLE TRIGGER ALL").await;
 }
+
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "test_server",
+    responses(
+        (status = 200, description = "Server start successfull")
+    )
+)]
+pub async fn health_handler() -> &'static str {
+    "OK"
+}

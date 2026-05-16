@@ -38,7 +38,7 @@ use crate::test_utils::*;
     tag = "Auth",
     request_body = RegisterRequestWrapper,
     responses(
-        (status = 201, description = "User registered", body = RegisterRequestWrapper),
+        (status = 201, description = "User registered", body = RegisterResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
         (status = 409, description = "Conflict - email or username already exists", body = ErrorResponse),
@@ -99,10 +99,10 @@ pub async fn register_handler(
         }
     };
     
-    let token_str = generator::Generator::new_session_token();
+    let token = generator::Generator::new_session_token();
     let expires_at = Utc::now() + chrono::Duration::days(30);
     
-    if let Err(e) = create_token(&state.db_pool, user_id, &token_str, expires_at).await {
+    if let Err(e) = create_token(&state.db_pool, user_id, &token, expires_at).await {
         tracing::error!("Failed to create token: {}", e);
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to create session" })));
     }
@@ -121,7 +121,7 @@ pub async fn register_handler(
         tracing::warn!("User created in DB but failed to add to cache: {}", e);
     }
     
-    (StatusCode::CREATED, Json(json!({ "token": token_str, "userId": user_id})))
+    (StatusCode::CREATED, Json(json!(RegisterResponse {token, user_id})))
 }
 
 #[utoipa::path(
@@ -160,7 +160,7 @@ pub async fn request_code_handler(
     tag = "Auth",
     request_body = VerifyCodeRequest,
     responses(
-        (status = 200, description = "User verified(not new)", body = SuccessResponse),
+        (status = 200, description = "User verified(old user)", body = NewUserVerifyResponse),
         (status = 201, description = "User verified(new user)", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -184,9 +184,8 @@ pub async fn verify_code_handler(
             return (StatusCode::OK, Json(json!({ "isNewUser": true })));
         }
         Err(_) => {
-            return (StatusCode::OK, Json(json!({ "isNewUser": true })));
-            // tracing::error!("DB error: {}", e);
-            // return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
+            tracing::error!("DB error (verify_code_handler)");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
         }
     };
 
@@ -208,7 +207,11 @@ pub async fn verify_code_handler(
         }
     };
 
-    (StatusCode::OK, Json(json!({ "isNewUser": false, "token": token, "userId": user.user_id })))
+    (StatusCode::OK, Json(json!(NewUserVerifyResponse{ 
+        is_new_user: false, 
+        token, 
+        user_id: user.user_id 
+    })))
 }
 
 #[utoipa::path(
@@ -232,8 +235,8 @@ pub async fn token_validate_handler(
     let token = auth.token();
     match validate_token(&state.db_pool, token).await {
         Ok(true) => (StatusCode::OK, Json(json!({"success": true}))),
-        Ok(false) => (StatusCode::UNAUTHORIZED, Json(json!({"success": false, "error": "Invalid or expired token"}))),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Token validation failed: {e}")})))
+        Ok(false) => (StatusCode::UNAUTHORIZED, Json(json!({"error": "Invalid or expired token"}))),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Token validation failed: {e}")})))
     }
 }
 

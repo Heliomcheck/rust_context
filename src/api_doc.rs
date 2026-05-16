@@ -7,6 +7,10 @@ use crate::{
     handlers::event::*,
     handlers::user::*,
     handlers::auth::*,
+    handlers::modules::poll::*,
+    handlers::modules::item::*,
+    handlers::modules::task::*,
+    test_utils::*,
 };
 
 #[derive(OpenApi)]
@@ -29,13 +33,15 @@ use crate::{
         (name = "User", description = "User management"),
         (name = "Event", description = "Event management"),
         (name = "Avatar", description = "Avatar management"),
-        (name = "Poll", description = "Poll management"),
+        (name = "Modules", description = "Modules management"),
+        (name = "test_server", description = "Test server endpoints")
         //(name = "Chat", description = "WebSocket chat")
     ),
     paths(
         create_event_handler,
         get_user_events_handler,
         get_detailed_event_handler,
+        event_join_handler,
 
         request_code_handler,
         verify_code_handler,
@@ -52,35 +58,75 @@ use crate::{
         add_user_to_event_handler,
         delete_user_from_event_handler,
         update_user_permissions_handler,
+
         create_poll_handler,
         update_poll_handler,
         delete_poll_handler,
+        vote_poll_handler,
+
+        create_item_list_handler,
+        update_item_list_handler,
+        assign_item_handler,
+        delete_item_list_handler,
+
+        create_task_list_handler,
+        update_task_list_handler,
+        assign_task_handler,
+        complete_task_handler,
+        delete_task_list_handler,
         // create_item_handler,
         // update_item_handler,
         // create_task_handler,
         // update_task_handler,
+
+        health_handler,
     ),
     components(
         schemas(
             // Auth
+            RegisterRequestWrapper,
             RegisterRequest,
             CodeRequest,
             VerifyCodeRequest,
+            RegisterResponse,
+            NewUserVerifyResponse,
             // User
             User,
             CheckUsernameRequest,
             EditUserRequest,
             UserDataResponse,
+            GetUserDataResponseWrapper,
             // Event
             CreateEventRequest,
             CreateEventResponse,
             GetEventRequest,
-            GetEventResponse,
+            GetEventsResponse,
+            GetEventDetailedResponse,
             UpdateUserPermissionsRequest,
             InviteUserToEventRequest,
+            JoinEventRequest,
             // Poll
+            PollResponse,
             CreatePollRequest,
             UpdatePollRequest,
+            DeletePollRequest,
+            VotePollRequest,
+            // Item_list
+            CreateItemListRequest,
+            ItemListResponse,
+            UpdateItemsListRequest,
+            AssignItemRequest,
+            DeleteItemListRequest,
+            // Task_list
+            CreateTaskListRequest,
+            UpdateTaskListRequest,
+            AssignTaskRequest,
+            CompleteTaskRequest,
+            CreateTaskListResponse,
+            DeleteTaskListResponse,
+            // Responses
+            SuccessResponse,
+            ErrorResponse,
             // PollOption,
             // VoteRequest,
             // // Common

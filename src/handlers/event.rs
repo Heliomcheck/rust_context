@@ -20,8 +20,10 @@ use crate::mail::send_mail_verif_code;
 use crate::{
     models::*,
     errors::AppError,
-    data_base::event_db::*,
-    plainning_modules::poll::*,
+    data_base::{
+        event_db::*,
+        plainning_modules::poll_db::*,
+    },
     permissions::*,
 };
 
@@ -99,14 +101,14 @@ pub async fn create_event_handler(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/events_detailed",
     tag = "Event",
     security(
         ("bearerAuth" = [])
     ),
     responses(
-        (status = 200, description = "Event details retrieved"),
+        (status = 200, description = "Event details retrieved", body = GetEventsResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -127,7 +129,7 @@ pub async fn get_user_events_handler(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/events_detailed",
     tag = "Event",
     security(
@@ -135,7 +137,7 @@ pub async fn get_user_events_handler(
     ),
     request_body = GetEventRequest,
     responses(
-        (status = 200, description = "Event details retrieved", body = GetEventRequest),
+        (status = 200, description = "Event details retrieved", body = GetEventDetailedResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -162,20 +164,17 @@ pub async fn get_detailed_event_handler(
 
     let members = get_users_in_event(&state.db_pool, event.event_id).await?;
 
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::MEMBER).await {
-        Ok(true) => true,
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
-        Err(e) => return Err(e),
-    };
+    // let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::MEMBER).await {
+    //     Ok(true) => true,
+    //     Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
+    //     Err(e) => return Err(e),
+    // }; refactor
 
     let permissions = get_user_permissions(&state.db_pool, event.event_id, user.user_id).await?;
-    Ok((StatusCode::OK, Json(json!(GetEventResponse {
+    Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
         event: event, 
         invite_url: Some(invite_url), 
-        members: members
-            .into_iter()
-            .map(|user| (user.username, user.user_id))
-            .collect(),
+        members: members,
         permissions: permissions.get_bits().to_string()
     }))))
 }
@@ -214,9 +213,9 @@ pub async fn get_detailed_event_handler(
     security(
         ("bearerAuth" = [])
     ),
-    request_body = CreateEventRequest,
+    request_body = InviteUserToEventRequest,
     responses(
-        (status = 204, description = "User added to event", body = InviteUserToEventRequest),
+        (status = 204, description = "User added to event", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
@@ -256,9 +255,9 @@ pub async fn add_user_to_event_handler(
     security(
         ("bearerAuth" = [])
     ),
-    request_body = CreateEventRequest,
+    request_body = GetEventRequest,
     responses(
-        (status = 204, description = "User deleted from event", body = GetEventRequest),
+        (status = 204, description = "User deleted from event", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
@@ -286,7 +285,17 @@ pub async fn delete_user_from_event_handler(
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to delete member".to_string())),
         Err(e) => return Err(e),
     };
-    let _ = remove_member(&state.db_pool, user.user_id, event.event_id).await?;
+    // chech user for deleting
+    let user_id_for_deleting = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user_id_for_deleting.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = remove_member(&state.db_pool, user_id_for_deleting.user_id, event.event_id).await?;
 
     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }
@@ -298,9 +307,9 @@ pub async fn delete_user_from_event_handler(
     security(
         ("bearerAuth" = [])
     ),
-    request_body = CreateEventRequest,
+    request_body = UpdateUserPermissionsRequest,
     responses(
-        (status = 204, description = "Updated user permissions", body = UpdateUserPermissionsRequest),
+        (status = 204, description = "Updated user permissions", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
@@ -333,150 +342,48 @@ pub async fn update_user_permissions_handler(
     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }
 
+#[utoipa::path(
+    post,
+    path = "/events/join",
+    tag = "Event",
+    security(
+        ("bearerAuth" = [])
+    ),
+    request_body = JoinEventRequest,
+    responses(
+        (status = 204, description = "Join in event successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
+        (status = 404, description = "User or event not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn event_join_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Json(payload): Json<JoinEventRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
+        Some(u) => u,
+        None => return Err(AppError::UserNotFound),
+    };
+    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_PERMISSIONS).await {
+        Ok(true) => true,
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Err(e) => return Err(e),
+    };
+
+
+    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+}
+
 // Plainning module handlers
-
-#[utoipa::path(
-    post,
-    path = "/events/create_poll",
-    tag = "Event",
-    security(
-        ("bearerAuth" = [])
-    ),
-    request_body = CreateEventRequest,
-    responses(
-        (status = 204, description = "Poll created", body = CreatePollRequest),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
-    )
-)]
-pub async fn create_poll_handler(
-    State(state): State<Arc<AppState>>,
-    auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<CreatePollRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
-        return Err(AppError::UserNotInEvent("User not in event".to_string()));
-    }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::CREATE_MODULE).await {
-        Ok(true) => true,
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
-        Err(e) => return Err(e),
-    };
-    // let max_allowed = get_count_of_options(&state.db_pool, payload.event_id).await?;
-
-    // if (payload.options.len() as i64) > max_allowed {
-    //     return Err(AppError::BadRequest("To many options".to_string()));
-    // }
-
-    let poll_id = create_poll(
-        &state.db_pool,
-        payload.event_id,
-        payload.question,
-        user.user_id,
-        payload.options,
-        payload.more_than_one_vote
-    ).await?;
-
-
-    Ok((StatusCode::CREATED, Json(json!({"poll_id": poll_id}))))
-}
-
-#[utoipa::path(
-    post,
-    path = "/events/update_poll",
-    tag = "Event",
-    security(
-        ("bearerAuth" = [])
-    ),
-    request_body = CreateEventRequest,
-    responses(
-        (status = 204, description = "Poll updated", body = UpdatePollRequest),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
-    )
-)]
-pub async fn update_poll_handler(
-    State(state): State<Arc<AppState>>,
-    auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<UpdatePollRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
-        return Err(AppError::UserNotInEvent("User not in event".to_string()));
-    }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
-        Ok(true) => true,
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
-        Err(e) => return Err(e),
-    };
-
-    let updated = edit_pool_question(&state.db_pool, payload.poll_id, payload.question).await?;
-    if !updated {
-        return Err(AppError::BadRequest("Poll not found".to_string()));
-    }
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
-}
-
-#[utoipa::path(
-    post,
-    path = "/events/delete_poll",
-    tag = "Event",
-    security(
-        ("bearerAuth" = [])
-    ),
-    request_body = CreateEventRequest,
-    responses(
-        (status = 204, description = "Poll deleted", body = CreatePollRequest),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
-    )
-)]
-pub async fn delete_poll_handler(
-    State(state): State<Arc<AppState>>,
-    auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<CreatePollRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
-        return Err(AppError::UserNotInEvent("User not in event".to_string()));
-    }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
-        Ok(true) => true,
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
-        Err(e) => return Err(e),
-    };
-
-    let deleted = delete_poll(&state.db_pool, payload.event_id).await?;
-    if !deleted {
-        return Err(AppError::BadRequest("Poll not found".to_string()));
-    }
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
-}
 
 
 pub async fn get_event_polls_handler(
@@ -503,11 +410,6 @@ pub async fn get_event_polls_handler(
 
     Ok((StatusCode::CREATED, Json(json!({"polls": polls}))))
 }
-
-
-
-
-
 
 // #[debug_handler]
 // pub async fn test_handler(

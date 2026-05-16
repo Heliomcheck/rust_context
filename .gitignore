@@ -2,3 +2,4 @@
 /logs
 Cargo.lock
 .env
+/uploads

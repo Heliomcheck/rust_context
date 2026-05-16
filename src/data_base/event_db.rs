@@ -1,16 +1,11 @@
-use axum::response::sse::Event;
 use sqlx::PgPool;
-use anyhow::{Context};
 use chrono::{DateTime, Utc};
-use tower::layer::util;
 use crate::{
     errors::AppError,
-    models::*,
     structs::*,
 };
 use std::result::Result;
 use std::string::String;
-use std::str::*;
 
 pub async fn create_event(
     pool: &PgPool,
@@ -146,11 +141,11 @@ pub async fn get_users_in_event(
         r#"
         SELECT 
             u.user_id,
-            u.username
+            COALESCE(u.display_name, u.username) AS name
         FROM event_user eu
         JOIN users u ON eu.user_id = u.user_id
         WHERE eu.event_id = $1
-        ORDER BY u.username ASC
+        ORDER BY COALESCE(u.display_name, u.username) ASC
         "#,
         event_id
     )
@@ -162,7 +157,7 @@ pub async fn get_users_in_event(
         .into_iter()
         .map(|row| EventParticipant {
             user_id: row.user_id,
-            username: row.username
+            name: row.name.unwrap_or_else(|| "Unknown".to_string()),
         })
         .collect())
 }

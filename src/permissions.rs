@@ -1,8 +1,7 @@
 use serde::Serialize;
 use sqlx::PgPool;
 use crate::{
-    errors::AppError, 
-    models::*, 
+    errors::AppError,
     structs::*
 };
 

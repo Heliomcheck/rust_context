@@ -23,7 +23,6 @@ pub(crate) mod test_utils;
 pub(crate) mod errors;
 
 pub(crate) mod structs;
-pub(crate) mod plainning_modules;
 pub(crate) mod permissions;
 pub(crate) mod api_doc;
 
@@ -38,12 +37,10 @@ use crate::{
     secrets::token::TokenStore,
     secrets::verification::VerificationStore,
     data_base::user_db::create_pool,
-    api_doc::ApiDoc
+    api_doc::ApiDoc,
+    handlers::modules::poll::*,
+    test_utils::health_handler,
 };
-
-async fn health_handler() -> &'static str {
-    "OK"
-}
 
 
 #[tokio::main]
@@ -84,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/user/get-data", routing::get(get_user_data_handler)) // user_id
         .route("/user/avatar", routing::post(upload_avatar_handler))
 
-        .route("/chat", routing::get(websocket_handler))
+        //.route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
@@ -95,35 +92,16 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/add_user", routing::post(add_user_to_event_handler))
         .route("/events/delete_user", routing::post(delete_user_from_event_handler))
         .route("/events/permissions", routing::put(update_user_permissions_handler))
-        .route("/events/create_poll", routing::post(create_poll_handler))
-        .route("/events/update_poll", routing::post(update_poll_handler))
-        .route("/events/delete_poll", routing::post(delete_poll_handler))
+        
+        .route("/modules/poll/create_poll", routing::post(create_poll_handler))
+        .route("/modules/poll/update_poll", routing::post(update_poll_handler))
+        .route("/modules/poll/delete_poll", routing::post(delete_poll_handler))
         // .route("/events/create_item", routing::post(create_item_handler))
         // .route("/events/update_item", routing::post(update_item_handler))
         // .route("/events/create_task", routing::post(create_task_handler))
         // .route("/events/update_task", routing::post(update_task_handler))
         .with_state(state);
-
-    // OK POST /auth/request_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
-    // OK POST /auth/resend_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
-    // OK POST /auth/verify_code {email: "test.example.com", code: "123456"} -> {is_new_user: true} or {token: "", is_new_user: false} or {error: "Verification failed"}
-    // OK POST /auth/register {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {token: ""} else {error: "reason"}
-    // OK POST /auth/token_validate {token: ""} -> {success: true} or {success: false, error: "reason"}
-    // OK POST /auth/logout {"token": ""} -> {success: true} or {success: false, error: "reason"}
-    // OK POST /auth/check_username {"username": "test"} -> {"available": true} or {"available": false}
-    // OK POST /user/edit {token: "", user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} -> if data.valid -> {success: true} else {error: "reason"}
-    // OK GET /user/get-data {token: ""} -> {user: {email: "test.example.com", display_name: "display_name", birthday: "2000-01-01", "username": "test"}} or {error: "reason"}
-    // OK POST /user/avatar {token: ""} and avatar -> {"avatar_url" : "avatar_url"}
-    // OK GET /avatars/:avatar_uuid.jpg {"token": "token"} -> avatar through multipart
-
-
-    // OK POST /events {token: "", event: {title: "Event title", description: "Event description", startDateTime: "2024-01-01T12:00:00Z", endDateTime: "2024-01-01T14:00:00Z", color: "blue"}} -> {event_id: ""} or {error: "reason"}
-    // OK GET /events/{event_id} {token: ""} -> {event: {id: 1, title: "Event title", description: "Event description", startDateTime: "2024-01-01T12:00:00Z", endDateTime: "2024-01-01T14:00:00Z", event_token: ""}} or {error: "reason"}
-    // OK POST /events/create_poll {token: "", event_id: 1, question: "Question?", options: ["Option 1", "Option 2"], more_than_one_vote: false} -> {poll_id: 1} or {error: "reason"}
-    // OK GET /events/{event_id}/polls {token: ""} -> {polls: [{poll_id: 1, question: "Question?", options: [{id: 1, text: "Option 1", votes: 10}]}]} or {error: "reason"}
-    // OK POST /events/add_member {event_token: "", user_id: "", permissions: ""} -> {success: "true"} or {error: "reason"}
-    //
-    // user_id добавить как отправку пользователю
+    
     let listner = TcpListener::bind(args[1].as_str()).await
         .context("Can't bind to address")?;
 

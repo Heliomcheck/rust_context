@@ -1,5 +1,4 @@
 use sqlx::postgres::{PgPoolOptions, PgPool};
-use anyhow::{Context};
 use std::result::Result;
 
 use chrono::{DateTime, Utc};

@@ -94,14 +94,14 @@ pub async fn user_edit_handler(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/user/get_data",
     tag = "User",
     security(
         ("bearerAuth" = [])
     ),
     responses(
-        (status = 200, description = "Get user data successfully", body = UserDataResponse),
+        (status = 200, description = "Get user data successfully", body = GetUserDataResponseWrapper),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -141,6 +141,10 @@ const UPLOAD_DIR: &str = "uploads/avatars";
     path = "/user/upload_avatar",
     tag = "User",
     request_body = Multipart,
+    //request_body(
+        //content_type = "multipart/form-data",
+        //description = "Avatar file to upload",
+    //),
     security(
         ("bearerAuth" = [])
     ),
@@ -151,6 +155,8 @@ const UPLOAD_DIR: &str = "uploads/avatars";
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
+
+
 pub async fn upload_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
@@ -228,7 +234,7 @@ pub async fn upload_avatar_handler(
 }
 
 #[utoipa::path(
-    post,
+    get,
     path = "/avatars/{file_name}",
     tag = "Avatar",
     security(

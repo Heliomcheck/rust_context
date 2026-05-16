@@ -118,10 +118,11 @@ pub struct Poll {
     pub more_than_one_vote: bool
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct EventParticipant {
     pub user_id: i64,
-    pub username: String
+    pub name: String
+
 }
 
 #[derive(Debug, Serialize, ToSchema)]

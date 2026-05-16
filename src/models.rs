@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use validator::{self, Validate, ValidationErrors};
-use axum::{http::StatusCode, response::sse::Event};
+use axum::{http::StatusCode};
 use axum::Json;
-use utoipa::{openapi, ToSchema};
+use utoipa::{ToSchema};
 
 use crate::{
     structs::*,
-    permissions::*,
 };
 
 pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, Json<Value>) {
@@ -27,7 +26,7 @@ pub fn validation_errors_to_response(errors: ValidationErrors) -> (StatusCode, J
     (StatusCode::BAD_REQUEST, Json(json!({ "errors": error_map })))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterRequestWrapper {
     pub user: RegisterRequest,
 }
@@ -49,6 +48,19 @@ pub struct RegisterRequest {
     #[validate(length(max = 100, 
         message = "Description length can't be more than 100 characters"))]
     pub description: Option<String>
+}
+
+#[derive(Deserialize, Serialize, Validate, ToSchema)]
+pub struct RegisterResponse {
+    pub token: String,
+    pub user_id: i64
+}
+
+#[derive(Deserialize, Serialize, Validate, ToSchema)]
+pub struct NewUserVerifyResponse {
+    pub is_new_user: bool, 
+    pub token: String, 
+    pub user_id: i64 
 }
 
 #[derive(Deserialize, Serialize, Validate, ToSchema)]
@@ -95,6 +107,11 @@ pub struct EditUserRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct GetUserDataResponseWrapper {
+    pub user: UserDataResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UserDataResponse {
     pub id: i64,
     pub username: String,
@@ -128,31 +145,28 @@ pub struct CreateEventResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct CreatePollRequest {
-    pub event_id: i64,
-    pub question: String,
-    pub options: Vec<String>,
-    pub more_than_one_vote: bool
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct UpdatePollRequest {
-    pub event_id: i64,
-    pub poll_id: i64,
-    pub question: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventRequest {
     pub event_id: i64,
+    pub user_id: i64
 } 
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct GetEventResponse {
+pub struct GetEventDetailedResponse {
     pub event: Events,
     pub invite_url: Option<String>,
-    pub members: Vec<(String, i64)>,
+    pub members: Vec<EventParticipant>,
     pub permissions: String
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct GetEventsResponse {
+    pub events: Vec<Events>
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct JoinEventRequest {
+    pub event_id: i64,
+    pub invite_token: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -169,12 +183,124 @@ pub struct InviteUserToEventRequest {
     pub permissions: i32
 }
 
+
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct SuccessResponse {
-    pub message: bool
+    pub success: bool
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: String
 }    
+
+// plaining modules
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct CreatePollRequest {
+    pub event_id: i64,
+    pub question: String,
+    pub options: Vec<String>,
+    pub more_than_one_vote: bool
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdatePollRequest {
+    pub event_id: i64,
+    pub poll_id: i64,
+    pub question: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct VotePollRequest {
+    pub event_id: i64,
+    pub poll_id: i64,
+    #[validate(length(min = 1, message = "At least one option"))]
+    pub option_indexes: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct DeletePollRequest {
+    pub event_id: i64,
+    pub poll_id: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct PollResponse {
+    pub poll_id: i64
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct CreateItemListRequest { 
+    pub event_id: i64,
+    pub title: String,
+    #[validate(length(min = 1, message = "Items cannot be empty"))]
+    pub items: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct ItemListResponse {
+    pub item_list_id: i64
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct UpdateItemsListRequest {
+    pub event_id: i64,
+    pub item_list_id: i64,
+    pub add: Option<Vec<String>>,
+    pub remove: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct AssignItemRequest {
+    pub event_id: i64,
+    pub item_list_id: i64,
+    pub assign: bool,   // true - забронировать, false - отказаться
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct DeleteItemListRequest {
+    pub event_id: i64,
+    pub item_list_id: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct CreateTaskListRequest {
+    pub event_id: i64,
+    pub title: String,
+    #[validate(length(min = 1, message = "Tasks cannot be empty"))]
+    pub tasks: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct CreateTaskListResponse {
+    pub task_list_id: i64
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct DeleteTaskListResponse {
+    pub task_list_id: i64,
+    pub event_id: i64
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
+pub struct UpdateTaskListRequest {
+    pub event_id: i64,
+    pub task_list_id: i64,
+    pub add: Option<Vec<String>>,
+    pub remove: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct AssignTaskRequest {
+    pub event_id: i64,
+    pub task_list_id: i64,
+    pub assign: bool,   // true - забронировать, false - отказаться
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct CompleteTaskRequest {
+    pub event_id: i64,
+    pub task_list_id: i64,
+    pub completed: bool,
+}
