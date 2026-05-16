@@ -124,3 +124,67 @@ pub async fn update_user_permissions(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data_base::{event_db, user_db};
+    use crate::test_utils::setup_test_db;
+    use chrono::Utc;
+
+    #[test]
+    fn test_event_permissions_basic_operations() {
+        let mut permissions = EventPermissions::empty();
+        assert!(!permissions.check_permission(EventPermissions::INVITE));
+
+        permissions.add_permission(EventPermissions::INVITE);
+        assert!(permissions.check_permission(EventPermissions::INVITE));
+
+        permissions.add_permission(EventPermissions::BAN_MEMBER);
+        assert!(permissions.check_permission(EventPermissions::BAN_MEMBER));
+
+        permissions.remove_permission(EventPermissions::INVITE);
+        assert!(!permissions.check_permission(EventPermissions::INVITE));
+    }
+
+    #[tokio::test]
+    async fn test_check_and_update_user_permissions_with_db() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+
+        let user_id = user_db::create_user_db(
+            &pool,
+            "perms_user",
+            "perms@mail.com",
+            "Perms User",
+            &None,
+            &None,
+            &Some("test".to_string()),
+        )
+        .await?;
+
+        let event_id = event_db::create_event(
+            &pool,
+            "Perms Event",
+            None,
+            None,
+            None,
+            "#abcdef".to_string(),
+        )
+        .await?;
+
+        event_db::add_member(&pool, user_id, event_id, EventPermissions::INVITE, 1).await?;
+
+        let event = event_db::get_event_by_id(&pool, event_id).await?;
+        let user = user_db::find_user_by_id(&pool, user_id).await?.unwrap();
+
+        let has_invite = check_user_permissions(&pool, &event, &user, EventPermissions::INVITE)
+            .await?;
+        assert!(has_invite);
+
+        update_user_permissions(&pool, event_id, user_id, EventPermissions::ADMIN).await?;
+        let updated_permissions = get_user_permissions(&pool, event_id, user_id).await?;
+        assert!(updated_permissions.check_permission(EventPermissions::ADMIN));
+
+        Ok(())
+    }
+}

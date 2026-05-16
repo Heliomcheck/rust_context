@@ -234,8 +234,30 @@ async fn test_get_user_by_username() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
+#[tokio::test]async fn test_load_from_db() -> anyhow::Result<()> {
+    let pool = setup_test_db().await;
+    let user_id = create_user_db(
+        &pool,
+        "dbuser",
+        "dbuser@mail.com",
+        "DB User",
+        &None,
+        &None,
+        &Some("test".to_string())
+    )
+    .await?;
+
+    let mut store = UserStore::new();
+    store.load_from_db(&pool).await?;
+
+    let user = store.get_user_by_id(&pool, user_id).await?;
+    assert!(user.is_some());
+    assert_eq!(user.unwrap().user_id, user_id);
+
+    Ok(())
+}
+
+#[tokio::test]async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
     let pool = setup_test_db().await;
 
     let mut store = UserStore::new();

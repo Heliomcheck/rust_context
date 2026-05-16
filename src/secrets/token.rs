@@ -33,3 +33,31 @@ impl TokenStore {
         self.token == input_token
     }
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+fn test_token_store() {
+    let user_id = 123;
+    let ttl = 7;
+
+    let token_store = TokenStore::new(user_id, ttl);
+
+    assert_eq!(token_store.user_id, user_id);
+    assert_eq!(token_store.token.len(), 32);
+    assert!(token_store.expires_at > token_store.created_at);
+    assert!(!token_store.is_expired());
+    assert!(token_store.is_valid(&token_store.token));
+    assert!(!token_store.is_valid("invalid_token"));
+}
+
+#[test]
+fn test_expired_token() {
+    let token_store = TokenStore::new(123, -1);
+
+    assert!(token_store.is_expired());
+    assert!(!token_store.is_valid(&token_store.token));
+}
+}

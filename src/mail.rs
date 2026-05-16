@@ -66,3 +66,32 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
         }
     }
 }
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_send_mail_verif_code_cooldown_logic() {
+        let state = Arc::new(crate::AppState {
+            db_pool: setup_test_db().await,
+            verification_store: tokio::sync::Mutex::new(
+                crate::verification::VerificationStore::new(),
+            ),
+        });
+
+        // first request creates code
+        {
+            let mut store = state.verification_store.lock().await;
+            let code = store.create("test@example.com", 15);
+            assert_eq!(code.len(), 6);
+            assert!(code.chars().all(|c| c.is_ascii_digit()));
+        }
+        // second immediate request should fail cooldown
+        {
+            let store = state.verification_store.lock().await;
+            assert!(!store.can_resend("test@example.com", 30));
+        }
+    }
+}

@@ -402,6 +402,48 @@ async fn test_token_validate_handler_invalid() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]// Проверяет, что logout успешен и токен деактивирован
+async fn test_logout_handler_success() {
+    let pool = setup_test_db().await;
+    let user_id = create_user_db(
+        &pool,
+        "logout_user",
+        "logout@mail.com",
+        "Logout User",
+        &None,
+        &None,
+        &Some("test".to_string())
+    ).await.unwrap();
+    let token = "logout_token";
+    create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1))
+        .await
+        .unwrap();
+
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool.clone(),
+    });
+
+    let app = Router::new()
+        .route("/auth/logout", routing::post(logout_handler))
+        .with_state(state);
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/auth/logout")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let user = find_user_by_token(&pool, token).await.unwrap();
+    assert!(user.is_none());
+}
+
 #[tokio::test]// Проверяет, что занятый username корректно обрабатывается эндпоинтом
 async fn test_username_check_handler() {
     let pool = setup_test_db().await;

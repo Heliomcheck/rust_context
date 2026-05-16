@@ -683,4 +683,172 @@ mod tests {
         assert_eq!(found_event_id.unwrap(), event_id);
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_get_user_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "user_get_event",
+            "getevent@mail.com",
+            "User Event",
+            &None,
+            &None,
+            &None
+        )
+        .await?;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
+
+        let event = get_user_event(&pool, user_id, 1, 0).await?;
+        assert_eq!(event.event_id, event_id);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_users_in_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "user_list",
+            "userlist@mail.com",
+            "User List",
+            &None,
+            &None,
+            &None
+        )
+        .await?;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
+
+        let users = get_users_in_event(&pool, event_id).await?;
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].user_id, user_id);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_check_user_in_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "user_check",
+            "usercheck@mail.com",
+            "User Check",
+            &None,
+            &None,
+            &None
+        )
+        .await?;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        add_member(&pool, user_id, event_id, 1, 1).await?;
+
+        assert!(check_user_in_event(&pool, event_id, user_id).await?);
+        assert!(!check_user_in_event(&pool, event_id, user_id + 1).await?);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_event_members() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "member_user",
+            "member@mail.com",
+            "Member User",
+            &None,
+            &None,
+            &None
+        )
+        .await?;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        add_member(&pool, user_id, event_id, 2, 3).await?;
+
+        let members = get_event_members(&pool, event_id).await?;
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].0, user_id);
+        assert_eq!(members[0].2, 2);
+        assert_eq!(members[0].3, 3);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_find_users_by_permission_and_has_permission() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "perm_user",
+            "perm@mail.com",
+            "Perm User",
+            &None,
+            &None,
+            &None
+        )
+        .await?;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        add_member(&pool, user_id, event_id, 4, 1).await?;
+
+        let users = find_users_by_permission(&pool, event_id, 4).await?;
+        assert_eq!(users, vec![user_id]);
+        assert!(has_permission(&pool, event_id, user_id, 4).await?);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_event_status() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let event_id = create_event(
+            &pool,
+            "Event",
+            None,
+            None,
+            None,
+            "#123456".to_string()
+        )
+        .await?;
+        update_event_status(&pool, event_id, 2).await?;
+        let event = get_event_by_id(&pool, event_id).await?;
+        assert_eq!(event.status_id, 2);
+        Ok(())
+    }
 }
