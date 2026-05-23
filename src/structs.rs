@@ -40,9 +40,9 @@ pub struct Events {
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub color: String,
-    pub is_active: bool,
+    pub location: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub status_id: i16
+    pub status_event: String
 }
 
 #[derive(Debug, Clone, FromRow, ToSchema)]

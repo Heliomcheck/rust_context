@@ -21,12 +21,3 @@ CREATE TABLE poll_votes (
     option_id BIGINT NOT NULL REFERENCES poll_option(option_id) ON DELETE CASCADE,
     PRIMARY KEY (poll_id, option_id, user_id)
 );
-
--- CREATE TABLE Hehe (
---     hehe_id int identity primary key, 
---     haha text not null,
---     is_hehe boolean not null,
---     is_haha boolean not null
---     time_hehe timestamp default now(),
---     time_haha timestamp default now(),
--- )

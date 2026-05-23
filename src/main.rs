@@ -40,6 +40,9 @@ use crate::{
     api_doc::ApiDoc,
     handlers::modules::poll::*,
     test_utils::health_handler,
+    handlers::modules::item::*,
+    handlers::modules::poll::*,
+    handlers::modules::task::*,
 };
 
 
@@ -78,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/auth/check_username", routing::post(username_check_handler))
 
         .route("/user/edit", routing::post(user_edit_handler))
-        .route("/user/get-data", routing::get(get_user_data_handler)) // user_id
+        .route("/user/get_data", routing::get(get_user_data_handler)) // user_id
         .route("/user/avatar", routing::post(upload_avatar_handler))
 
         //.route("/chat", routing::get(websocket_handler))
@@ -87,15 +90,32 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
-        .route("/events_detailed", routing::get(get_detailed_event_handler))
+        .route("/event/{event_id}", routing::get(get_detailed_event_handler))
+        .route("/events/{event_id}", routing::put(update_event_handler))
+        .route("/events", routing::get(get_user_events_handler))
         //.route("/events/modules", routing::get(get_event_modules_handler))
-        .route("/events/add_user", routing::post(add_user_to_event_handler))
-        .route("/events/delete_user", routing::post(delete_user_from_event_handler))
-        .route("/events/permissions", routing::put(update_user_permissions_handler))
+        .route("/events/{event_id}/join", routing::post(add_user_to_event_handler))
+        .route("/events/{event_id}/delete", routing::post(delete_user_from_event_handler))
+        .route("/events/{event_id}/permissions", routing::put(update_user_permissions_handler))
+
+        .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
+        .route("/events/{event_id}/planning/poll/{poll_id}", routing::post(vote_poll_handler))
+
+        .route("/events/{event_id}/planning/items", routing::post(create_item_list_handler))
+        .route("/events/{event_id}/planning/items/{module_id}", routing::patch(update_item_list_handler))
+        .route("/events/{event_id}/planning/items/{module_id}/items/{item_id}/assign", routing::post(assign_item_handler))
+        .route("/events/{event_id}/planning/items/{module_id}", routing::delete(delete_item_list_handler))
+
+        .route("/events/{event_id}/planning/tasks", routing::post(create_task_list_handler))
+        .route("/events/{event_id}/planning/tasks/{module_id}", routing::patch(update_task_list_handler))
+        .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign", routing::post(assign_task_handler))
+        .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete", routing::post(complete_task_handler))
+        .route("/events/{event_id}/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
         
         .route("/modules/poll/create_poll", routing::post(create_poll_handler))
-        .route("/modules/poll/update_poll", routing::post(update_poll_handler))
-        .route("/modules/poll/delete_poll", routing::post(delete_poll_handler))
+        .route("/modules/poll/update_poll", routing::put(update_poll_handler))
+        .route("/modules/poll/delete_poll", routing::put(delete_poll_handler))
+        .route("/modules/poll/vote_poll", routing::post(vote_poll_handler))
         // .route("/events/create_item", routing::post(create_item_handler))
         // .route("/events/update_item", routing::post(update_item_handler))
         // .route("/events/create_task", routing::post(create_task_handler))

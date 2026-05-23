@@ -71,16 +71,24 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use tokio::{net::TcpListener, sync::broadcast};
+    use crate::test_utils::setup_test_db;
+    use crate::AppState;
+    use crate::UserStore;
+    use crate::ChatMessage;
+    use crate::VerificationStore;
 
     #[tokio::test]
     async fn test_send_mail_verif_code_cooldown_logic() {
-        let state = Arc::new(crate::AppState {
-            db_pool: setup_test_db().await,
-            verification_store: tokio::sync::Mutex::new(
-                crate::verification::VerificationStore::new(),
-            ),
-        });
 
+        let pool = setup_test_db().await;
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool
+        });
         // first request creates code
         {
             let mut store = state.verification_store.lock().await;

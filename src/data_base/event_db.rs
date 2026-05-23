@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use crate::{
     errors::AppError,
     structs::*,
+    models::*
 };
 use std::result::Result;
 use std::string::String;
@@ -10,7 +11,7 @@ use std::string::String;
 pub async fn create_event(
     pool: &PgPool,
     event_name: &str,
-    description_event: Option<&str>,
+    description_event: Option<String>,
     start_date: Option<DateTime<Utc>>,
     end_date: Option<DateTime<Utc>>,
     color: String
@@ -39,7 +40,7 @@ pub async fn get_event_by_id(
 ) -> Result<Events, AppError> {
     let row = sqlx::query!(
         r#"
-        SELECT event_id, event_name, description_event, start_date, end_date, color, is_active, created_at, status_id
+        SELECT event_id, event_name, description_event, start_date, end_date, color, created_at, status_event, location
         FROM events
         WHERE event_id = $1
         "#,
@@ -56,9 +57,9 @@ pub async fn get_event_by_id(
         start_date: row.start_date,
         end_date: row.end_date,
         color: row.color,
-        is_active: row.is_active,
         created_at: row.created_at,
-        status_id: row.status_id
+        status_event: row.status_event,
+        location: row.location
     })
 }
 
@@ -70,11 +71,19 @@ pub async fn get_user_events(
 ) -> Result<Vec<Events>, AppError> {
     let rows = sqlx::query!(
         r#"
-        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, e.is_active, e.created_at, e.status_id, e.color
+        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, 
+            e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
         WHERE eu.user_id = $1
-        ORDER BY e.is_active DESC, e.created_at DESC
+        ORDER BY 
+            CASE e.status_event
+                WHEN 'OPEN' THEN 1
+                WHEN 'CANCELLED' THEN 2
+                WHEN 'ARCHIVED' THEN 3
+                ELSE 99
+            END ASC,
+            e.created_at DESC
         LIMIT $2 OFFSET $3
         "#,
         user_id,
@@ -90,10 +99,10 @@ pub async fn get_user_events(
         description_event: r.description_event,
         start_date: r.start_date,
         end_date: r.end_date,
-        is_active: r.is_active,
         created_at: r.created_at,
-        status_id: r.status_id,
-        color: r.color
+        status_event: r.status_event,
+        color: r.color,
+        location: r.location
     }).collect())
 }
 
@@ -106,7 +115,7 @@ pub async fn get_user_event(
 ) -> Result<Events, AppError> {
     let row = sqlx::query!(
         r#"
-        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, e.is_active, e.created_at, e.status_id, e.color
+        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
         WHERE eu.user_id = $1
@@ -126,10 +135,10 @@ pub async fn get_user_event(
         description_event: row.description_event,
         start_date: row.start_date,
         end_date: row.end_date,
-        is_active: row.is_active,
         created_at: row.created_at,
-        status_id: row.status_id,
+        status_event: row.status_event,
         color: row.color,
+        location: row.location
     })
 }
 
@@ -189,10 +198,10 @@ pub async fn check_user_in_event(
 pub async fn get_event_members(
     pool: &PgPool,
     event_id: i64,
-) -> Result<Vec<(i64, String, i32, i16, DateTime<Utc>)>, AppError> {
+) -> Result<Vec<EventMembers>, AppError> {
     let rows = sqlx::query!(
         r#"
-        SELECT u.user_id, u.username, eu.permissions, eu.status_id, eu.joined_at
+        SELECT u.user_id, u.username, eu.permissions, eu.joined_at
         FROM event_user eu
         JOIN users u ON eu.user_id = u.user_id
         WHERE eu.event_id = $1
@@ -204,18 +213,24 @@ pub async fn get_event_members(
     .await?;
 
 
-     Ok(rows.into_iter().map(|r| (r.user_id, r.username, r.permissions, r.status_id, 
-         r.joined_at.unwrap())).collect())
+     Ok(rows.into_iter().map(|r| EventMembers {
+         user_id: r.user_id,
+         username: r.username,
+         permissions: r.permissions,
+         joined_at: r.joined_at.unwrap()
+     }).collect())
 }
 
 pub async fn update_event(
     pool: &PgPool,
     event_id: i64,
-    event_name: Option<&str>,
-    description_event: Option<&str>,
+    event_name: Option<String>,
+    description_event: Option<String>,
     start_date: Option<DateTime<Utc>>,
     end_date: Option<DateTime<Utc>>,
-    is_active: Option<bool>,
+    color: Option<String>,
+    location: Option<String>,
+    status_event: Option<String>
 ) -> Result<(), AppError> {
     sqlx::query!(
         r#"
@@ -225,14 +240,18 @@ pub async fn update_event(
             description_event = COALESCE($2, description_event),
             start_date = COALESCE($3, start_date),
             end_date = COALESCE($4, end_date),
-            is_active = COALESCE($5, is_active)
-        WHERE event_id = $6
+            status_event = COALESCE($5, status_event),
+            color = COALESCE($6, color),
+            location = COALESCE($7, location)
+        WHERE event_id = $8
         "#,
         event_name,
         description_event,
         start_date,
         end_date,
-        is_active,
+        status_event,
+        color,
+        location,
         event_id
     )
     .execute(pool)
@@ -244,15 +263,15 @@ pub async fn update_event(
 pub async fn update_event_status(
     pool: &PgPool,
     event_id: i64,
-    status_id: i16,
+    status_event: String,
 ) -> Result<(), AppError> {
     sqlx::query!(
         r#"
         UPDATE events
-        SET status_id = $1
+        SET status_event = $1
         WHERE event_id = $2
         "#,
-        status_id,
+        status_event,
         event_id
     )
     .execute(pool)
@@ -289,20 +308,18 @@ pub async fn add_member(
     pool: &PgPool,
     user_id: i64,
     event_id: i64,
-    permissions: i32,
-    status_id: i16,
+    permissions: i32
 ) -> Result<(), AppError> {
     sqlx::query!(
         r#"
-        INSERT INTO event_user (user_id, event_id, permissions, status_id)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO event_user (user_id, event_id, permissions)
+        VALUES ($1, $2, $3)
         ON CONFLICT (user_id, event_id) DO UPDATE
-        SET permissions = $3, status_id = $4
+        SET permissions = $3
         "#,
         user_id,
         event_id,
-        permissions,
-        status_id
+        permissions
     )
     .execute(pool)
     .await?;
@@ -351,28 +368,6 @@ pub async fn update_member_role(
     Ok(())
 }
 
-pub async fn update_member_status(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-    status_id: i16,
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        UPDATE event_user
-        SET status_id = $1
-        WHERE user_id = $2 AND event_id = $3
-        "#,
-        status_id,
-        user_id,
-        event_id
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
 pub async fn has_permission(
     pool: &PgPool,
     event_id: i64,
@@ -396,40 +391,40 @@ pub async fn has_permission(
     Ok(row)
 }
 
-pub async fn create_event_token(
+pub async fn create_event_url(
     pool: &PgPool,
     event_id: i64,
     expires_in_hours: i64,
 ) -> Result<String, AppError> {
-    let token = uuid::Uuid::new_v4().to_string().replace("-", "");
+    let event_url = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
     
     sqlx::query!(
         r#"
-        INSERT INTO event_token (event_token, event_id, expires_at)
+        INSERT INTO event_url (event_url, event_id, expires_at)
         VALUES ($1, $2, $3)
         "#,
-        token,
+        event_url,
         event_id,
         expires_at
     )
     .execute(pool)
     .await?;
     
-    Ok(token)
+    Ok(event_url)
 }
 
 pub async fn get_event_id_by_token(
     pool: &PgPool,
-    token: &str,
+    event_url: &str,
 ) -> Result<Option<i64>, AppError> {
     let row = sqlx::query!(
         r#"
         SELECT event_id
-        FROM event_token
-        WHERE event_token = $1 AND expires_at > NOW()
+        FROM event_url
+        WHERE event_url = $1 AND expires_at > NOW()
         "#,
-        token
+        event_url
     )
     .fetch_optional(pool)
     .await?;
@@ -472,7 +467,7 @@ mod tests {
         let event_id = create_event(
             &pool,
             "Test Event",
-            Some("Description"),
+            Some("Description".to_string()),
             None,
             None,
             "#123456".to_string(),
@@ -505,11 +500,13 @@ mod tests {
         update_event(
             &pool,
             event_id,
-            Some("New"),
-            Some("Updated"),
+            Some("New".to_string()),
+            Some("Updated".to_string()),
             None,
             None,
-            Some(false)
+            Some("#654321".to_string()),
+            Some("1".to_string()),
+            Some("OPEN".to_string())
         ).await?;
         let event = get_event_by_id(&pool, event_id).await?;
         assert_eq!(event.event_name, "New");
@@ -555,7 +552,7 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 10,).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(exists);
         Ok(())
@@ -580,7 +577,7 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 1,).await?;
         remove_member(&pool, user_id, event_id).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(!exists);
@@ -606,10 +603,10 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1, 2).await?;
-        update_member_role(&pool, user_id, event_id, 2).await?;
+        add_member(&pool, user_id, event_id, 10,).await?;
+        update_member_role(&pool, user_id, event_id, 01).await?;
         let members = get_event_members(&pool, event_id).await?;
-        assert_eq!(members[0].2, 2);
+        assert_eq!(members[0].permissions, 01);
         Ok(())
     }
 
@@ -632,10 +629,9 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
-        update_member_status(&pool, user_id, event_id, 3).await?;
+        add_member(&pool, user_id, event_id, 10,).await?; 
         let members = get_event_members(&pool, event_id).await?;
-        assert_eq!(members[0].3, 3);
+        assert_eq!(members[0].permissions, 10);
         Ok(())
     }
 
@@ -660,7 +656,7 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
         let events = get_user_events(&pool, user_id, 10, 0).await?;
         assert_eq!(events.len(), 1);
         Ok(())
@@ -678,8 +674,8 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        let token = create_event_token(&pool, event_id, 1).await?;
-        let found_event_id = get_event_id_by_token(&pool, &token).await?;
+        let event_url = create_event_url(&pool, event_id, 1).await?;
+        let found_event_id = get_event_id_by_token(&pool, &event_url).await?;
         assert_eq!(found_event_id.unwrap(), event_id);
         Ok(())
     }
@@ -706,7 +702,7 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 10 ).await?;
 
         let event = get_user_event(&pool, user_id, 1, 0).await?;
         assert_eq!(event.event_id, event_id);
@@ -735,7 +731,7 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
 
         let users = get_users_in_event(&pool, event_id).await?;
         assert_eq!(users.len(), 1);
@@ -765,7 +761,7 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 1, 1).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
 
         assert!(check_user_in_event(&pool, event_id, user_id).await?);
         assert!(!check_user_in_event(&pool, event_id, user_id + 1).await?);
@@ -794,13 +790,13 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 2, 3).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
 
         let members = get_event_members(&pool, event_id).await?;
         assert_eq!(members.len(), 1);
-        assert_eq!(members[0].0, user_id);
-        assert_eq!(members[0].2, 2);
-        assert_eq!(members[0].3, 3);
+        assert_eq!(members[0].user_id, user_id);
+        assert_eq!(members[0].username, "member_user");
+        assert_eq!(members[0].permissions, 10);
         Ok(())
     }
 
@@ -826,7 +822,7 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 4, 1).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
 
         let users = find_users_by_permission(&pool, event_id, 4).await?;
         assert_eq!(users, vec![user_id]);
@@ -846,9 +842,9 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        update_event_status(&pool, event_id, 2).await?;
+        update_event_status(&pool, event_id, "OPEN".to_string()).await?;
         let event = get_event_by_id(&pool, event_id).await?;
-        assert_eq!(event.status_id, 2);
+        assert_eq!(event.status_event, "OPEN".to_string());
         Ok(())
     }
 }

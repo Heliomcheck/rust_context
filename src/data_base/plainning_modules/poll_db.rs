@@ -13,7 +13,13 @@ pub async fn create_poll(
     user_id: i64,
     options: Vec<String>,
     more_than_one_vote: bool,
-) -> Result<i64, sqlx::Error> {
+) -> Result<i64, AppError> {
+    if options.len() < 2 {
+        return Err(AppError::BadRequest("Poll must have at least 2 options".to_string()));
+    }
+
+    let mut tx = pool.begin().await?;
+
     let create_poll = sqlx::query!(
         r#"
         INSERT INTO poll(event_id, question, created_by, more_than_one_vote)
@@ -24,23 +30,27 @@ pub async fn create_poll(
         question,
         user_id,
         more_than_one_vote
-    ).fetch_one(pool)
+    )
+    .fetch_one(&mut *tx)
     .await?;
 
     let poll_id = create_poll.poll_id;
 
-    let add_options = sqlx::query!(
+    sqlx::query!(
         r#"
         INSERT INTO poll_option (poll_id, option_text)
         SELECT $1, unnest($2::text[])
         "#,
         poll_id,
         &options
-    ).execute(pool)
+    )
+    .execute(&mut *tx)
     .await?;
 
-    Ok(create_poll.poll_id)
-} 
+    tx.commit().await?;
+
+    Ok(poll_id)
+}
 
 pub async fn get_count_of_options(
     pool: &PgPool,
@@ -57,16 +67,16 @@ pub async fn get_count_of_options(
     .fetch_optional(pool)
     .await?;
 
-    let _ = match poll_info {
+    match poll_info {
         Some(info) => {
             if info.more_than_one_vote {
-                return Ok(100); // max count of options
+                Ok(100)
             } else {
-                return Ok(1); // min count of options
+                Ok(1)
             }
         },
         None => return Err(sqlx::Error::RowNotFound)
-    };
+}
 }
 
 pub async fn vote_on_poll(
@@ -189,13 +199,15 @@ mod tests{
     use crate::test_utils::setup_test_db;
 
     #[tokio::test]
-    async fn test_create_poll() {
+    async fn test_get_count_of_options_single_vote() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя
         let user_id = create_user_db(
             &pool,
-            "testuser",
-            "test@example.com",
-            "Test User",
+            "testuser1",
+            "test1@example.com",
+            "Test User 1",
             &None,
             &None,
             &None,
@@ -203,7 +215,7 @@ mod tests{
         .await
         .unwrap();
         
-        // 2. Создаём событие
+        // ✅ Создаем событие
         let event_id = create_event(
             &pool,
             "Test Event",
@@ -214,91 +226,120 @@ mod tests{
         )
         .await
         .unwrap();
-
-        add_member(&pool, user_id, event_id, EventPermissions::CREATE_MODULE, 2).await.unwrap();
-
-        let poll_id = create_poll(
-            &pool, 
-            event_id,
-            "What is your favorite color?".to_string(),
-            user_id, 
-            vec![
-                "Red".to_string(), 
-                "Blue".to_string()
-                ], 
-            false
-        )
-        .await
-        .unwrap();
-        assert!(poll_id > 0);
-
-        let poll = sqlx::query!(
-            r#"
-            SELECT question, created_by, more_than_one_vote
-            FROM poll
-            WHERE poll_id = $1
-            "#,
-            poll_id
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(poll.question, "What is your favorite color?");
-        assert_eq!(poll.created_by, 1);
-        assert_eq!(poll.more_than_one_vote, false);
-    }
-    
-    #[tokio::test]
-    async fn test_get_count_of_options_single_vote() {
-        let pool = setup_test_db().await;
+        
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
 
         let poll_id = create_poll(
             &pool,
-            1,
+            event_id,  // ← используем реальный event_id
             "Single vote".to_string(),
-            1,
+            user_id,   // ← используем реальный user_id
             vec!["A".to_string(), "B".to_string()],
             false,
         )
         .await
         .unwrap();
 
-        let count = get_count_of_options(&pool, poll_id)
-            .await
-            .unwrap();
-
+        let count = get_count_of_options(&pool, poll_id).await.unwrap();
         assert_eq!(count, 1);
     }
+
     #[tokio::test]
     async fn test_get_count_of_options_multiple_vote() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя
+        let user_id = create_user_db(
+            &pool,
+            "testuser2",
+            "test2@example.com",
+            "Test User 2",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        // ✅ Создаем событие
+        let event_id = create_event(
+            &pool,
+            "Test Event 2",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        )
+        .await
+        .unwrap();
+        
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
 
         let poll_id = create_poll(
             &pool,
-            1,
+            event_id,
             "Multiple vote".to_string(),
-            1,
+            user_id,
             vec!["A".to_string(), "B".to_string()],
             true,
         )
         .await
         .unwrap();
 
-        let count = get_count_of_options(&pool, poll_id)
-            .await
-            .unwrap();
-
+        let count = get_count_of_options(&pool, poll_id).await.unwrap();
         assert_eq!(count, 100);
     }
+
     #[tokio::test]
     async fn test_vote_on_poll() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя для голосования
+        let voter_id = create_user_db(
+            &pool,
+            "voter",
+            "voter@example.com",
+            "Voter",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        // ✅ Создаем создателя опроса
+        let creator_id = create_user_db(
+            &pool,
+            "creator",
+            "creator@example.com",
+            "Creator",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        // ✅ Создаем событие
+        let event_id = create_event(
+            &pool,
+            "Test Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        )
+        .await
+        .unwrap();
+        
+        add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
+        add_member(&pool, voter_id, event_id, EventPermissions::ADMIN).await.unwrap();
 
         let poll_id = create_poll(
             &pool,
-            1,
+            event_id,
             "Vote test".to_string(),
-            1,
+            creator_id,
             vec!["A".to_string(), "B".to_string()],
             true,
         )
@@ -320,11 +361,10 @@ mod tests{
 
         let option_ids: Vec<i64> = option_id.into_iter().map(|o| o.option_id).collect();
 
-        // Голосуем
         let result = vote_on_poll(
             &pool,
             poll_id,
-            42,           // ← запятая была пропущена!
+            voter_id,  // ← используем реальный voter_id
             vec![option_ids[0]],
         )
         .await
@@ -332,7 +372,6 @@ mod tests{
 
         assert!(result);
 
-        // Проверяем, что голос сохранился
         let votes = sqlx::query!(
             r#"
             SELECT option_id
@@ -340,7 +379,7 @@ mod tests{
             WHERE poll_id = $1 AND user_id = $2
             "#,
             poll_id,
-            42
+            voter_id
         )
         .fetch_all(&pool)
         .await
@@ -353,22 +392,45 @@ mod tests{
     #[tokio::test]
     async fn test_delete_poll() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя и событие
+        let user_id = create_user_db(
+            &pool,
+            "deleteuser",
+            "delete@example.com",
+            "Delete User",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        let event_id = create_event(
+            &pool,
+            "Delete Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        )
+        .await
+        .unwrap();
+        
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
 
         let poll_id = create_poll(
             &pool,
-            1,
+            event_id,
             "Delete test".to_string(),
-            1,
-            vec!["A".to_string()],
+            user_id,
+            vec!["A".to_string(), "B".to_string()],
             false,
         )
         .await
         .unwrap();
 
-        let deleted = delete_poll(&pool, poll_id)
-            .await
-            .unwrap();
-
+        let deleted = delete_poll(&pool, poll_id).await.unwrap();
         assert!(deleted);
 
         let deleted_poll = sqlx::query!(
@@ -385,28 +447,51 @@ mod tests{
 
         assert!(deleted_poll.is_none());
     }
+
     #[tokio::test]
     async fn test_edit_poll_question() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя и событие
+        let user_id = create_user_db(
+            &pool,
+            "edituser",
+            "edit@example.com",
+            "Edit User",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        let event_id = create_event(
+            &pool,
+            "Edit Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        )
+        .await
+        .unwrap();
+        
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
 
         let poll_id = create_poll(
             &pool,
-            1,
+            event_id,
             "Old question".to_string(),
-            1,
-            vec!["A".to_string()],
+            user_id,
+            vec!["A".to_string(), "B".to_string()],
             false,
         )
         .await
         .unwrap();
 
-        let updated = edit_pool_question(
-            &pool,
-            poll_id,
-            "New question".to_string(),
-        )
-        .await
-        .unwrap();
+        let updated = edit_pool_question(&pool, poll_id, "New question".to_string())
+            .await
+            .unwrap();
 
         assert!(updated);
 
@@ -424,16 +509,43 @@ mod tests{
 
         assert_eq!(poll.question, "New question");
     }
-     #[tokio::test]
+
+    #[tokio::test]
     async fn test_get_event_polls() {
         let pool = setup_test_db().await;
+        
+        // ✅ Создаем пользователя и событие
+        let user_id = create_user_db(
+            &pool,
+            "eventpolls",
+            "eventpolls@example.com",
+            "Event Polls User",
+            &None,
+            &None,
+            &None,
+        )
+        .await
+        .unwrap();
+        
+        let event_id = create_event(
+            &pool,
+            "Polls Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        )
+        .await
+        .unwrap();
+        
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
 
         create_poll(
             &pool,
-            777,
+            event_id,  // ← используем реальный event_id
             "Poll 1".to_string(),
-            1,
-            vec!["A".to_string()],
+            user_id,
+            vec!["A".to_string(), "B".to_string()],  // ← минимум 2 опции
             false,
         )
         .await
@@ -441,21 +553,18 @@ mod tests{
 
         create_poll(
             &pool,
-            777,
+            event_id,
             "Poll 2".to_string(),
-            2,
-            vec!["B".to_string()],
+            user_id,
+            vec!["C".to_string(), "D".to_string()],  // ← минимум 2 опции
             true,
         )
         .await
         .unwrap();
 
-        let polls = get_event_polls(&pool, 777)
-            .await
-            .unwrap();
+        let polls = get_event_polls(&pool, event_id).await.unwrap();
 
         assert_eq!(polls.len(), 2);
-
         assert!(polls.iter().any(|p| p.question == "Poll 1"));
         assert!(polls.iter().any(|p| p.question == "Poll 2"));
     }

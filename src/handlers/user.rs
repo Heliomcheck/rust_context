@@ -83,7 +83,7 @@ pub async fn user_edit_handler(
         payload.display_name.as_deref(),
         payload.birthday.as_deref(),
         payload.avatar_url.as_deref(),
-        payload.descripion.as_deref()
+        payload.description.as_deref()
     ).await {
         tracing::error!("Failed to update user: {}", e);
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to update user"})));
@@ -125,7 +125,7 @@ pub async fn get_user_data_handler(
     };
     
     let response = UserDataResponse {
-        id: user.user_id,
+        user_id: user.user_id,
         username: user.username.clone(),
         email: user.email.clone(),
         name: user.display_name.clone(),

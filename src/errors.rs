@@ -21,7 +21,13 @@ pub enum AppError {
     #[error("Invalid request")]
     BadRequest(String),
     #[error("User is not member")]
-    UserNotInEvent(String)
+    UserNotInEvent(String),
+    #[error("Not found")]
+    NotFound(String),
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
 }
 
 impl IntoResponse for AppError {
@@ -35,7 +41,10 @@ impl IntoResponse for AppError {
             AppError::DbError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::UserNotInEvent(msg) => (StatusCode::FORBIDDEN, msg)
+            AppError::UserNotInEvent(msg) => (StatusCode::FORBIDDEN, msg),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
         };
         (status, Json(json!({ "error": msg }))).into_response()
     }

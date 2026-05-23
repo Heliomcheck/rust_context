@@ -53,7 +53,7 @@ pub async fn create_poll_handler(
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::CREATE_MODULE).await {
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => true,
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
         Err(e) => return Err(e),
@@ -78,7 +78,7 @@ pub async fn create_poll_handler(
 }
 
 #[utoipa::path(
-    post,
+    put,
     path = "/modules/poll/update_poll",
     tag = "Modules",
     security(
@@ -108,7 +108,7 @@ pub async fn update_poll_handler(
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => true,
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
         Err(e) => return Err(e),
@@ -152,7 +152,7 @@ pub async fn delete_poll_handler(
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::UPDATE_MODULE).await {
+    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => true,
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
         Err(e) => return Err(e),

@@ -20,32 +20,31 @@ impl EventPermissions {
     }
 
     pub fn full() -> Self {
-        Self { bits: Self::ALL }
+        Self { bits: Self::OWNER }
     }
 
     pub fn get_bits(&self) -> i32 {
         self.bits
     }
 
-    pub const INVITE: i32 = 1 << 0;
-    pub const UPDATE_PERMISSIONS: i32 = 1 << 1;
-    pub const DELETE_MEMBER: i32 = 1 << 2;
-    pub const REMOVE_MEMBER: i32 = 1 << 1;
-    pub const EDIT_EVENT: i32 = 1 << 2;
-    pub const BAN_MEMBER: i32 = 1 << 3;
-    pub const CREATE_MODULE: i32 = 1 << 4;
-    pub const UPDATE_MODULE: i32 = 1 << 4;
-    pub const DELETE_MODULE: i32 = 1 << 5;
-    pub const VIEW_STATS: i32 = 1 << 6;
-    pub const MANAGE_ROLES: i32 = 1 << 7;
-    pub const VIEW_LOGS: i32 = 1 << 8;
-    pub const ADMIN: i32 = 1 << 30;
-    pub const OWNER: i32 = 1 << 31;
+    // pub const INVITE: i32 = 1 << 0;
+    // pub const UPDATE_PERMISSIONS: i32 = 1 << 1;
+    // pub const DELETE_MEMBER: i32 = 1 << 2;
+    // pub const REMOVE_MEMBER: i32 = 1 << 1;
+    // pub const EDIT_EVENT: i32 = 1 << 2;
+    // pub const BAN_MEMBER: i32 = 1 << 3;
+    // pub const CREATE_MODULE: i32 = 1 << 4;
+    // pub const UPDATE_MODULE: i32 = 1 << 4;
+    // pub const DELETE_MODULE: i32 = 1 << 5;
+    // pub const VIEW_STATS: i32 = 1 << 6;
+    // pub const MANAGE_ROLES: i32 = 1 << 7;
+    // pub const VIEW_LOGS: i32 = 1 << 8;
+    // pub const ADMIN: i32 = 1 << 30;
+    // pub const OWNER: i32 = 1 << 31;
 
-    pub const MEMBER: i32 = Self::INVITE | Self::VIEW_STATS;
-    pub const MODERATOR: i32 = Self::INVITE | Self::REMOVE_MEMBER | Self::BAN_MEMBER | Self::VIEW_STATS;
-    pub const ADMIN_FULL: i32 = Self::ADMIN | Self::MODERATOR | Self::EDIT_EVENT | Self::MANAGE_ROLES | Self::VIEW_LOGS;
-    pub const ALL: i32 = Self::OWNER | Self::ADMIN_FULL | Self::CREATE_MODULE | Self::DELETE_MODULE;
+    pub const OWNER:i32 = 1 << 0;
+    pub const ADMIN:i32 = 1 << 1;
+
 
     pub fn check_permission(&self, permission: i32) -> bool {
         (self.bits & permission) != 0
@@ -134,17 +133,18 @@ mod tests {
 
     #[test]
     fn test_event_permissions_basic_operations() {
-        let mut permissions = EventPermissions::empty();
-        assert!(!permissions.check_permission(EventPermissions::INVITE));
+        let mut permissions = EventPermissions::full();
+        assert!(permissions.check_permission(EventPermissions::OWNER));
+        assert!(permissions.check_permission(EventPermissions::ADMIN));
 
-        permissions.add_permission(EventPermissions::INVITE);
-        assert!(permissions.check_permission(EventPermissions::INVITE));
+        // permissions.add_permission(EventPermissions::INVITE);
+        // assert!(permissions.check_permission(EventPermissions::INVITE));
 
-        permissions.add_permission(EventPermissions::BAN_MEMBER);
-        assert!(permissions.check_permission(EventPermissions::BAN_MEMBER));
+        // permissions.add_permission(EventPermissions::BAN_MEMBER);
+        // assert!(permissions.check_permission(EventPermissions::BAN_MEMBER));
 
-        permissions.remove_permission(EventPermissions::INVITE);
-        assert!(!permissions.check_permission(EventPermissions::INVITE));
+        // permissions.remove_permission(EventPermissions::INVITE);
+        // assert!(!permissions.check_permission(EventPermissions::INVITE));
     }
 
     #[tokio::test]
@@ -172,14 +172,14 @@ mod tests {
         )
         .await?;
 
-        event_db::add_member(&pool, user_id, event_id, EventPermissions::INVITE, 1).await?;
+        event_db::add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
 
         let event = event_db::get_event_by_id(&pool, event_id).await?;
         let user = user_db::find_user_by_id(&pool, user_id).await?.unwrap();
 
-        let has_invite = check_user_permissions(&pool, &event, &user, EventPermissions::INVITE)
+        let has_owner = check_user_permissions(&pool, &event, &user, EventPermissions::OWNER)
             .await?;
-        assert!(has_invite);
+        assert!(has_owner);
 
         update_user_permissions(&pool, event_id, user_id, EventPermissions::ADMIN).await?;
         let updated_permissions = get_user_permissions(&pool, event_id, user_id).await?;

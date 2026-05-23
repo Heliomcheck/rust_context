@@ -1,19 +1,37 @@
-use axum::response::IntoResponse;
-use axum::extract::State;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Json,
+};
+use axum_extra::extract::TypedHeader;
+use headers::Authorization;
 use std::sync::Arc;
-use axum::Json;
-use axum::http::StatusCode;
-use serde_json::json;
-use std::result::Result;
-use axum_extra::TypedHeader;
-use headers::{Authorization, authorization::Bearer};
 
 use crate::{
-    models::*,
+    AppState,
     errors::AppError,
-    structs::*,
+    models::{
+        CreateTaskListRequest,
+        UpdateTaskListRequest,
+        AssignTaskRequest,
+        CompleteTaskRequest,
+        SuccessResponse,
+    },
+    data_base::plainning_modules::task_db::{
+        create_task_list,
+        get_task_list,
+        update_task_list,
+        assign_task,
+        complete_task,
+        delete_task_list,
+        verify_task_list_in_event,
+    },
+    data_base::event_db::{check_user_in_event, has_permission},
+    data_base::user_db::find_user_by_token,
 };
-
+use headers::authorization::Bearer;
+use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoResponse, routing::{self, trace}
+        };
 
 #[utoipa::path(
     post,
@@ -34,12 +52,35 @@ use crate::{
 pub async fn create_task_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<CreateTaskListRequest>
+    Path(event_id): Path<i64>,
+    Json(payload): Json<CreateTaskListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let token = auth.token().to_string();
+    let user = find_user_by_token(&state.db_pool, &token)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    let user_id = user.user_id;
 
-    let task_list_id = 20;
+    let is_in_event = check_user_in_event(&state.db_pool, event_id, user_id).await?;
+    if !is_in_event {
+        return Err(AppError::Forbidden("User not in event".to_string()));
+    }
 
-    Ok((StatusCode::CREATED, Json(json!(CreateTaskListResponse { task_list_id }))))
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?;
+    if !has_perm {
+        return Err(AppError::Forbidden("No permission to create task list".to_string()));
+    }
+
+    let task_list = create_task_list(
+        &state.db_pool,
+        event_id,
+        &payload.title,
+        &payload.tasks,
+        user_id,
+    )
+    .await?;
+
+    Ok((StatusCode::CREATED, Json(task_list)))
 }
 
 #[utoipa::path(
@@ -66,7 +107,7 @@ pub async fn update_task_list_handler(
 
     let task_list_id = 20;
 
-    Ok((StatusCode::NO_CONTENT, Json(json!(SuccessResponse { success: true }))))
+    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
@@ -93,7 +134,7 @@ pub async fn assign_task_handler(
 
     let task_list_id = 20;
 
-    Ok((StatusCode::NO_CONTENT, Json(json!(SuccessResponse { success: true }))))
+    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
@@ -120,7 +161,7 @@ pub async fn complete_task_handler(
 
     let task_list_id = 20;
 
-    Ok((StatusCode::NO_CONTENT, Json(json!(SuccessResponse { success: true }))))
+    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
@@ -142,10 +183,20 @@ pub async fn complete_task_handler(
 pub async fn delete_task_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<DeleteTaskListResponse>
+    Path((event_id, module_id)): Path<(i64, i64)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let token = auth.token().to_string();
+    let user = find_user_by_token(&state.db_pool, &token)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    let user_id = user.user_id;
 
-    let task_list_id = 20;
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, 4).await?;
+    if !has_perm {
+        return Err(AppError::Forbidden("No permission to delete task list".to_string()));
+    }
 
-    Ok((StatusCode::NO_CONTENT, Json(json!(SuccessResponse { success: true }))))
+    delete_task_list(&state.db_pool, module_id, event_id).await?;
+
+    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
 }

@@ -6,10 +6,10 @@ CREATE TABLE events (
     start_date TIMESTAMPTZ DEFAULT NULL,
     end_date TIMESTAMPTZ DEFAULT NULL,
     color VARCHAR(7) NOT NULL DEFAULT '#123456' ,
-    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    location VARCHAR(200),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    status_id SMALLINT NOT NULL REFERENCES event_statuses(status_id) DEFAULT 2
+    status_event VARCHAR(30) NOT NULL DEFAULT 'OPEN'
 );
 
-CREATE INDEX idx_events_status_id ON events(status_id);
+CREATE INDEX idx_events_status_event ON events(status_event);
 CREATE INDEX idx_events_start_date ON events(start_date);

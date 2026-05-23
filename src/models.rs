@@ -4,6 +4,7 @@ use validator::{self, Validate, ValidationErrors};
 use axum::{http::StatusCode};
 use axum::Json;
 use utoipa::{ToSchema};
+use chrono::{DateTime, Utc};
 
 use crate::{
     structs::*,
@@ -103,7 +104,7 @@ pub struct EditUserRequest {
     pub avatar_url: Option<String>,
     #[validate(length(max = 100, 
         message = "Description length can't be more than 100 characters"))]
-    pub descripion: Option<String>
+    pub description: Option<String>
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -113,7 +114,7 @@ pub struct GetUserDataResponseWrapper {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UserDataResponse {
-    pub id: i64,
+    pub user_id: i64,
     pub username: String,
     pub email: String,
     pub name: String,
@@ -124,7 +125,7 @@ pub struct UserDataResponse {
 pub struct CreateEventRequest {
     pub title: String,
     pub location: Option<String>,
-    pub description: Option<String>,
+    pub description_event: Option<String>,
     pub start_date_time: Option<String>,
     pub end_date_time: Option<String>,
     pub color: String
@@ -134,14 +135,14 @@ pub struct CreateEventRequest {
 pub struct CreateEventResponse {
     pub id: String,
     pub title: String,
-    pub description: Option<String>,
+    pub description_event: Option<String>,
     pub location: Option<String>,
     pub start_date_time: Option<String>, 
     pub end_date_time: Option<String>,
     pub color: String, 
     pub created_by: String,
     pub created_at: String,
-    pub status: String
+    pub status_event: String
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -164,6 +165,18 @@ pub struct GetEventsResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdateEventRequest {
+    pub event_id: i64,
+    pub event_name: Option<String>,
+    pub location: Option<String>,
+    pub description_event: Option<String>,
+    pub start_date_time: Option<String>,
+    pub end_date_time: Option<String>,
+    pub color: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct JoinEventRequest {
     pub event_id: i64,
     pub invite_token: String,
@@ -174,6 +187,14 @@ pub struct UpdateUserPermissionsRequest {
     pub event_id: i64,
     pub user_id: i64,
     pub new_permissions: i32
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct EventMembers {
+    pub user_id: i64,
+    pub username: String,
+    pub permissions: i32,
+    pub joined_at: DateTime<Utc>
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -303,4 +324,11 @@ pub struct CompleteTaskRequest {
     pub event_id: i64,
     pub task_list_id: i64,
     pub completed: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PathParams {
+    pub first_id: i32,
+    pub second_id: i32,
+    pub third_id: i32
 }
