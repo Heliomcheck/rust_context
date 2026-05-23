@@ -194,7 +194,7 @@ pub async fn check_user_in_event(
 pub async fn get_event_members(
     pool: &PgPool,
     event_id: i64,
-) -> Result<Vec<(i64, String, i32, i16, DateTime<Utc>)>, AppError> {
+) -> Result<Vec<MemberInfo>, AppError> {
     let rows = sqlx::query!(
         r#"
         SELECT u.user_id, u.username, eu.permissions, eu.status_id, eu.joined_at
@@ -208,9 +208,16 @@ pub async fn get_event_members(
     .fetch_all(pool)
     .await?;
 
-
-     Ok(rows.into_iter().map(|r| (r.user_id, r.username, r.permissions, r.status_id, 
-         r.joined_at.unwrap())).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| MemberInfo {
+            user_id: r.user_id,
+            username: r.username,
+            permissions: r.permissions,
+            status_id: r.status_id,
+            joined_at: r.joined_at.expect("joined_at should not be null"),
+        })
+        .collect())
 }
 
 pub async fn update_event(

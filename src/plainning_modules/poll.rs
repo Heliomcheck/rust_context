@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 use std::str;
-
+use crate::structs::{PollWithOptions, PollOptionResult};
 use crate::{
     structs::*,
 };
@@ -173,6 +173,48 @@ pub async fn get_event_polls(
     }).collect();
 
     Ok(polls)
+}
+
+pub async fn get_poll_details(
+    pool: &PgPool,
+    poll_id: i64,
+) -> Result<PollWithOptions, sqlx::Error> {
+    let poll = sqlx::query_as!(
+        Poll,
+        r#"
+        SELECT poll_id, question, created_by, created_at, is_active, more_than_one_vote
+        FROM poll
+        WHERE poll_id = $1
+        "#,
+        poll_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let options = sqlx::query!(
+        r#"
+        SELECT po.option_id, po.option_text, COUNT(pv.user_id) as "votes!"
+        FROM poll_option po
+        LEFT JOIN poll_votes pv ON po.option_id = pv.option_id
+        WHERE po.poll_id = $1
+        GROUP BY po.option_id, po.option_text
+        ORDER BY po.option_id
+        "#,
+        poll_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let options = options
+        .into_iter()
+        .map(|r| PollOptionResult {
+            option_id: r.option_id,
+            option_text: r.option_text,
+            votes: r.votes.unwrap_or(0),
+        })
+        .collect();
+
+    Ok(PollWithOptions { poll, options })
 }
 //test
 #[cfg(test)]

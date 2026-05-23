@@ -71,38 +71,48 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let app = Router::new()
-        .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .route("/auth/request_code", routing::post(request_code_handler))
-        .route("/auth/verify_code", routing::post(verify_code_handler))
-        .route( "/auth/resend_code", routing::post(resend_code_handler))
-        .route("/auth/register", routing::post(register_handler))
-        .route("/auth/token_validate", routing::post(token_validate_handler))
-        .route("/auth/logout", routing::post(logout_handler)) 
-        .route("/auth/check_username", routing::post(username_check_handler))
-
-        .route("/user/edit", routing::post(user_edit_handler))
-        .route("/user/get-data", routing::get(get_user_data_handler)) // user_id
-        .route("/user/avatar", routing::post(upload_avatar_handler))
-
-        .route("/chat", routing::get(websocket_handler))
-        .route("/health", routing::get(health_handler)) // delete in future
-        
-        .route("/avatars/{file_name}", routing::get(get_avatar_handler))
-
-        .route("/events", routing::post(create_event_handler))
-        .route("/events_detailed", routing::get(get_detailed_event_handler))
-        //.route("/events/modules", routing::get(get_event_modules_handler))
-        .route("/events/add_user", routing::post(add_user_to_event_handler))
-        .route("/events/delete_user", routing::post(delete_user_from_event_handler))
-        .route("/events/permissions", routing::put(update_user_permissions_handler))
-        .route("/events/create_poll", routing::post(create_poll_handler))
-        .route("/events/update_poll", routing::post(update_poll_handler))
-        .route("/events/delete_poll", routing::post(delete_poll_handler))
-        // .route("/events/create_item", routing::post(create_item_handler))
-        // .route("/events/update_item", routing::post(update_item_handler))
-        // .route("/events/create_task", routing::post(create_task_handler))
-        // .route("/events/update_task", routing::post(update_task_handler))
-        .with_state(state);
+    .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+    // Auth
+    .route("/auth/request_code", post(request_code_handler))
+    .route("/auth/resend_code", post(resend_code_handler))
+    .route("/auth/verify_code", post(verify_code_handler))
+    .route("/auth/register", post(register_handler))
+    .route("/auth/token_validate", post(token_validate_handler))
+    .route("/auth/logout", post(logout_handler))
+    .route("/auth/check_username", post(username_check_handler))
+    // User
+    .route("/user/me", get(get_user_data_handler).put(user_edit_handler))
+    .route("/user/me/avatar", post(upload_avatar_handler))
+    .route("/avatars/{user_id}", get(get_avatar_handler))
+    // Events
+    .route("/events", get(list_events_handler).post(create_event_handler))
+    .route("/events/{event_id}",
+        get(get_event_handler)
+        .put(update_event_handler)
+        .delete(delete_event_handler))
+    .route("/events/{event_id}/join", post(join_event_handler))
+    .route("/events/{event_id}/members", post(add_member_handler))
+    .route("/events/{event_id}/members/{user_id}",
+        delete(remove_member_handler))
+    .route("/events/{event_id}/members/{user_id}/permissions",
+        put(update_member_permissions_handler))
+    // Polls
+    .route("/events/{event_id}/polls",
+        get(list_polls_handler).post(create_poll_handler))
+    .route("/events/{event_id}/polls/{poll_id}",
+        get(get_poll_handler)
+        .put(update_poll_handler)
+        .delete(delete_poll_handler))
+    .route("/events/{event_id}/polls/{poll_id}/vote", post(vote_handler))
+    // Items
+    .route("/events/{event_id}/items",
+        get(list_items_handler).post(create_item_handler))
+    .route("/events/{event_id}/items/{item_id}",
+        put(update_item_handler).delete(delete_item_handler))
+    // Chat и health
+    .route("/chat", get(websocket_handler))
+    .route("/health", get(health_handler))
+    .with_state(state);
 
     // OK POST /auth/request_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}
     // OK POST /auth/resend_code {email: "test.example.com"} -> {"success": true} or {"success":false, error: "reason"}

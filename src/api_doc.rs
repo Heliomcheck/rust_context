@@ -1,12 +1,14 @@
 // src/api_doc.rs
 use utoipa::{OpenApi, openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme}};
-
+use utoipa::OpenApi;
 use crate::{
     structs::*,
     models::*,
     handlers::event::*,
     handlers::user::*,
     handlers::auth::*,
+    handlers::poll::*, 
+    handlers::item::*,
 };
 
 #[derive(OpenApi)]
@@ -32,11 +34,8 @@ use crate::{
         (name = "Poll", description = "Poll management"),
         //(name = "Chat", description = "WebSocket chat")
     ),
-    paths(
-        create_event_handler,
-        get_user_events_handler,
-        get_detailed_event_handler,
-
+        paths(
+        // Auth
         request_code_handler,
         verify_code_handler,
         resend_code_handler,
@@ -44,21 +43,33 @@ use crate::{
         token_validate_handler,
         logout_handler,
         username_check_handler,
-
+        // User
         user_edit_handler,
         get_user_data_handler,
         upload_avatar_handler,
         get_avatar_handler,
-        add_user_to_event_handler,
-        delete_user_from_event_handler,
-        update_user_permissions_handler,
+        // Events
+        create_event_handler,
+        list_events_handler,
+        get_event_handler,
+        update_event_handler,
+        delete_event_handler,
+        join_event_handler,
+        add_member_handler,
+        remove_member_handler,
+        update_member_permissions_handler,
+        // Polls
         create_poll_handler,
+        list_polls_handler,
+        get_poll_handler,
         update_poll_handler,
         delete_poll_handler,
-        // create_item_handler,
-        // update_item_handler,
-        // create_task_handler,
-        // update_task_handler,
+        vote_handler,
+        // Items
+        create_item_handler,
+        list_items_handler,
+        update_item_handler,
+        delete_item_handler,
     ),
     components(
         schemas(

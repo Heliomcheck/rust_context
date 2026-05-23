@@ -131,3 +131,34 @@ pub struct EventUser {
     pub permissions: EventPermissions,
     pub joined_at: DateTime<Utc>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MemberInfo {
+    pub user_id: i64,
+    pub username: String,
+    pub permissions: i32,
+    pub status_id: i16,
+    pub joined_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PollWithOptions {
+    pub poll: Poll,
+    pub options: Vec<PollOptionResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PollOptionResult {
+    pub option_id: i64,
+    pub option_text: String,
+    pub votes: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct Item {
+    pub item_id: i64,
+    pub event_id: i64,
+    pub content: String,
+    pub done: bool,
+    pub created_by: i64,
+    pub created_at: DateTime<Utc>,
+}

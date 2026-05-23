@@ -178,3 +178,66 @@ pub struct SuccessResponse {
 pub struct ErrorResponse {
     pub error: String
 }    
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdateEventRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub start_date_time: Option<String>,
+    pub end_date_time: Option<String>,
+    pub color: Option<String>,
+    pub is_active: Option<bool>,
+    pub status_id: Option<i16>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct VoteRequest {
+    pub option_ids: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct JoinEventRequest {
+    pub invite_token: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AddMemberRequest {
+    pub user_id: i64,
+    pub permissions: i32,
+    pub status_id: i16,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateMemberPermissionsRequest {
+    pub new_permissions: i32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EventListResponse {
+    pub events: Vec<Events>,
+}
+
+// Обновлённый GetEventResponse (замените им старый)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GetEventResponse {
+    pub event: Events,
+    pub invite_url: Option<String>,
+    pub members: Vec<MemberInfo>,
+    pub permissions: String,
+}
+
+// Модели для items
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateItemRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateItemRequest {
+    pub content: Option<String>,
+    pub done: Option<bool>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ItemResponse {
+    pub item: Item,
+}
