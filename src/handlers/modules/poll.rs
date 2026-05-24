@@ -1,30 +1,37 @@
-use axum::response::IntoResponse;
-use axum::extract::State;
-use std::sync::Arc;
-use axum::Json;
-use axum::http::StatusCode;
-use serde_json::json;
-use std::result::Result;
-use axum_extra::TypedHeader;
-use headers::{Authorization, authorization::Bearer};
-use crate::{data_base::user_db::*};
-
-use crate::structs::*;
-
-use crate::{
-    models::*,
-    errors::AppError,
-    data_base::{
-        event_db::*,
-        plainning_modules::poll_db::*,
-    },
-    permissions::*,
+use axum::{
+    response::IntoResponse,
+    extract::Query,
+    extract::State,
+    Json,
+    http::StatusCode,
 };
+use std::{
+    sync::Arc,
+    result::Result
+};
+use serde_json::json;
+use axum_extra::TypedHeader;
+use headers::{
+    Authorization, 
+    authorization::Bearer
+};
+use crate::{
+    data_base::{
+        event_db::*, 
+        plainning_modules::poll_db::*
+    }, 
+    errors::AppError, 
+    handlers::user::get_user_for_handler_from_token, 
+    models::*, 
+    permissions::*, 
+    structs::*
+};
+
 
 
 #[utoipa::path(
     post,
-    path = "/modules/poll/create_poll",
+    path = "/events/{event_id}/planning/poll",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -41,13 +48,12 @@ use crate::{
 pub async fn create_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
+    query: Query<EventModule>,
     Json(payload): Json<CreatePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
+
+    let event = get_event_by_id(&state.db_pool, query.event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
@@ -58,15 +64,16 @@ pub async fn create_poll_handler(
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
         Err(e) => return Err(e),
     };
-    // let max_allowed = get_count_of_options(&state.db_pool, payload.event_id).await?;
 
-    // if (payload.options.len() as i64) > max_allowed {
-    //     return Err(AppError::BadRequest("To many options".to_string()));
-    // }
+    let max_allowed = get_count_of_options(&state.db_pool, query.event_id).await?;
+
+    if (payload.options.len() as i64) > max_allowed {
+        return Err(AppError::BadRequest("To many options".to_string()));
+    }
 
     let poll_id = create_poll(
         &state.db_pool,
-        payload.event_id,
+        query.event_id,
         payload.question,
         user.user_id,
         payload.options,
@@ -79,7 +86,7 @@ pub async fn create_poll_handler(
 
 #[utoipa::path(
     put,
-    path = "/modules/poll/update_poll",
+    path = "/events/{event_id}/planning/poll/{poll_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -96,25 +103,26 @@ pub async fn create_poll_handler(
 pub async fn update_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<UpdatePollRequest>,
+    query: Query<EventModule>,
+    Json(payload): Json<UpdatePollRequest>
 ) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
+
+    let event = get_event_by_id(&state.db_pool, query.event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
-        Ok(true) => true,
+
+    match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
+        Ok(true) => {},
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
         Err(e) => return Err(e),
     };
 
-    let updated = edit_pool_question(&state.db_pool, payload.poll_id, payload.question).await?;
+    let updated = edit_pool_question(&state.db_pool, query.module_id, payload.question).await?;
     if !updated {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
@@ -122,8 +130,8 @@ pub async fn update_poll_handler(
 }
 
 #[utoipa::path(
-    post,
-    path = "/modules/poll/delete_poll",
+    delete,
+    path = "/events/{event_id}/planning/poll/{poll_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -140,13 +148,12 @@ pub async fn update_poll_handler(
 pub async fn delete_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Json(payload): Json<DeletePollRequest>,
+    query: Query<EventModule>,
+    //Json(payload): Json<DeletePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-        Some(u) => u,
-        None => return Err(AppError::UserNotFound),
-    };
-    let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
+
+    let event = get_event_by_id(&state.db_pool, query.event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
@@ -158,7 +165,7 @@ pub async fn delete_poll_handler(
         Err(e) => return Err(e),
     };
 
-    let deleted = delete_poll(&state.db_pool, payload.event_id).await?;
+    let deleted = delete_poll(&state.db_pool, query.event_id).await?;
     if !deleted {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
@@ -167,7 +174,7 @@ pub async fn delete_poll_handler(
 
 #[utoipa::path(
     post,
-    path = "/modules/poll/vote_poll",
+    path = "/events/{event_id}/planning/poll/{poll_id}/vote",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -184,8 +191,23 @@ pub async fn delete_poll_handler(
 pub async fn vote_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
+    query: Query<EventModule>,
     Json(payload): Json<VotePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
+
+    let event = get_event_by_id(&state.db_pool, query.event_id).await?;
+
+    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
+    if !is_member {
+        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    }
+
+    match vote_on_poll(&state.db_pool, query.module_id, user.user_id, payload.option_indexes).await {
+        Ok(true) => {},
+        Ok(false) => return Err(AppError::BadRequest("Poll or options not found".to_string())),
+        Err(e) => return Err(AppError::Internal(format!("Failed to vote on poll: {}", e))),
+    };
 
     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }

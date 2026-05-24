@@ -1,5 +1,5 @@
 // src/api_doc.rs
-use utoipa::{OpenApi, openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme}};
+use utoipa::{OpenApi, openapi::security::{HttpBuilder, SecurityScheme}};
 
 use crate::{
     structs::*,
@@ -42,6 +42,7 @@ use crate::{
         get_user_events_handler,
         get_detailed_event_handler,
         event_join_handler,
+        update_event_status_handler,
 
         request_code_handler,
         verify_code_handler,
@@ -51,11 +52,10 @@ use crate::{
         logout_handler,
         username_check_handler,
 
-        user_edit_handler,
+        update_user_data_handler,
         get_user_data_handler,
         upload_avatar_handler,
         get_avatar_handler,
-        add_user_to_event_handler,
         delete_user_from_event_handler,
         update_user_permissions_handler,
 
@@ -99,12 +99,12 @@ use crate::{
             // Event
             CreateEventRequest,
             CreateEventResponse,
-            GetEventRequest,
             GetEventsResponse,
             GetEventDetailedResponse,
             UpdateUserPermissionsRequest,
             InviteUserToEventRequest,
             JoinEventRequest,
+            UpdateEventStatusRequest,
             // Poll
             PollResponse,
             CreatePollRequest,

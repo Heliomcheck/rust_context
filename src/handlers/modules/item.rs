@@ -1,14 +1,19 @@
-use axum::response::IntoResponse;
-use axum::extract::{RawPathParams, State};
-use serde::Deserialize;
-use axum::extract::Path;
-use std::sync::Arc;
-use axum::Json;
-use axum::http::StatusCode;
-use serde_json::json;
-use std::result::Result;
+use axum::{
+    response::IntoResponse,
+    extract::State,
+    extract::Path,
+    Json,
+    http::StatusCode
+};
+use std::{
+    sync::Arc,
+    result::Result
+};
 use axum_extra::TypedHeader;
-use headers::{Authorization, authorization::Bearer};
+use headers::{
+    Authorization, 
+    authorization::Bearer
+};
 
 use crate::structs::*;
 
@@ -18,15 +23,14 @@ use crate::{
     data_base::{
         event_db::*,
         plainning_modules::item_db::*,
-    },
-    data_base::user_db::*,
-    permissions::*,
+        user_db::*
+    }
 };
 
 
 #[utoipa::path(
     post,
-    path = "/modules/item_list/create_item_list",
+    path = "/events/{event_id}/planning/items",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -80,7 +84,7 @@ pub async fn create_item_list_handler(
 
 #[utoipa::path(
     patch,
-    path = "/modules/item_list/update_item_list",
+    path = "/events/{event_id}/planning/items/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -148,7 +152,7 @@ pub async fn update_item_list_handler(
 
 #[utoipa::path(
     patch,
-    path = "/modules/item_list/assign_item",
+    path = "/events/{event_id}/planning/items/{module_id}/items/{item_id}/assign",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -200,7 +204,7 @@ pub async fn assign_item_handler(
 
 #[utoipa::path(
     post,
-    path = "/modules/item_list/delete_item_list",
+    path = "/events/{event_id}/planning/items/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])

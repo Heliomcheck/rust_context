@@ -14,6 +14,7 @@ impl Generator {
         Uuid::new_v4().to_string().replace("-", "")
     }
     
+    #[allow(dead_code)]
     pub fn api_token() -> String {          // for integration with external services
         let mut rng = rand::rng(); 
         let bytes: Vec<u8> = (0..8).map(|_| rng.random()).collect();

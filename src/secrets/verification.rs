@@ -6,12 +6,14 @@ use crate::secrets::generator::Generator;
 #[derive(Debug)]
 pub struct VerificationCode {
     pub code: String,
+    #[allow(dead_code)]
     pub email: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>
 }
 
 impl VerificationCode {
+    #[allow(dead_code)]
     pub const DEFAULT_TTL_MINUTES: i64 = 15;
 
     pub fn new(email: String, code: String, ttl_minutes: i64) -> Self { // Creating struct
@@ -48,6 +50,7 @@ impl VerificationCode {
         self.code == input_code
     }
 
+    #[allow(dead_code)]
     pub fn remaining_seconds(&self) -> i64 { // TTL in seconds
         let now = Utc::now();
         if now > self.expires_at {
@@ -78,14 +81,17 @@ impl VerificationStore {
         code_str
     }
     
+    #[allow(dead_code)]
     pub fn create_default(&mut self, email: &str) -> String { // With TTL in default
         self.create(email, VerificationCode::DEFAULT_TTL_MINUTES)
     }
     
+    #[allow(dead_code)]
     pub fn get(&self, email: &str) -> Option<&VerificationCode> { // Get strust link
         self.codes.get(email)
     }
     
+    #[allow(dead_code)]
     pub fn get_mut(&mut self, email: &str) -> Option<&mut VerificationCode> { // Get strust link with mut
         self.codes.get_mut(email)
     }
@@ -100,10 +106,12 @@ impl VerificationStore {
         false
     }
     
+    #[allow(dead_code)]
     pub fn remove(&mut self, email: &str) -> Option<VerificationCode> { // Delete code
         self.codes.remove(email)
     }
 
+    #[allow(dead_code)]
     pub fn cleanup_expired(&mut self) -> usize { // Delete all expired codes
         let expired: Vec<String> = self.codes
             .iter()
@@ -125,6 +133,7 @@ impl VerificationStore {
     }
     true
 }
+#[allow(dead_code)]
 pub fn get_or_create(&mut self, email: &str, ttl_minutes: i64) -> String {
     if let Some(code) = self.codes.get(email) {
         if !code.is_expired() {

@@ -34,11 +34,11 @@ pub struct ChatMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Events {
-    pub event_name: String,
+    pub title: String,
     pub event_id: i64,
     pub description_event: Option<String>,
-    pub start_date: Option<DateTime<Utc>>,
-    pub end_date: Option<DateTime<Utc>>,
+    pub start_date_time: Option<DateTime<Utc>>,
+    pub end_date_time: Option<DateTime<Utc>>,
     pub color: String,
     pub location: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -52,11 +52,14 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub birthday: Option<String>,
-    pub avatar_url: Option<String>, // make access through user_id
+    #[allow(dead_code)]
     pub description_profile: Option<String>,
 
+    #[allow(dead_code)]
     pub is_deleted: bool,
+    #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
+    #[allow(dead_code)]
     pub last_online_at: DateTime<Utc>
 }
 
@@ -67,7 +70,6 @@ impl User {
         email: String,
         birthday: Option<String>,
         display_name: String,
-        avatar_url: Option<String>,
         description_profile: Option<String>
     ) -> Self {
         User {
@@ -77,7 +79,6 @@ impl User {
             user_id: user_id,
             description_profile: description_profile,
             display_name: display_name,
-            avatar_url: avatar_url,
 
             is_deleted: false,
             created_at: Utc::now(),
@@ -85,13 +86,12 @@ impl User {
         }
     }
 
+    #[allow(dead_code)]
     pub fn edit(&mut self, payload: EditUserRequest) { // exit origin data, only update
             self.username = payload.username.unwrap_or(self.username.clone());
-            self.email = payload.email.unwrap_or(self.email.clone());
             self.birthday = payload.birthday.or(self.birthday.clone());    // Keep existing birthday if not provided
             self.user_id = self.user_id;
             self.display_name = payload.display_name.unwrap_or(self.display_name.clone());
-            self.avatar_url = payload.avatar_url.or(self.avatar_url.clone());
 
             self.is_deleted = self.is_deleted;
             self.created_at = self.created_at;
@@ -121,11 +121,13 @@ pub struct Poll {
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct EventParticipant {
     pub user_id: i64,
-    pub name: String
-
+    pub display_name: String,
+    pub permissions: String
 }
 
+
 #[derive(Debug, Serialize, ToSchema)]
+#[allow(dead_code)]
 pub struct EventUser {
     pub user_id: i64,
     pub event_id: i64,

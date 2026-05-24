@@ -2,10 +2,6 @@ use sqlx::PgPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::errors::AppError;
-use std::collections::HashMap;
-use crate::{
-    //errors::AppError,
-};
 
 // ============== СТРУКТУРЫ ДЛЯ ОТВЕТОВ ==============
 
@@ -291,4 +287,61 @@ pub async fn verify_item_list_in_event(
     .await?;
 
     Ok(row.exists)
+}
+
+pub async fn get_event_item_lists(
+    pool: &PgPool,
+    event_id: i64,
+) -> Result<Vec<ItemListWithItems>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT 
+            il.item_list_id,
+            il.title,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'item_id', ili.item_id,
+                        'item_text', ili.item_text,
+                        'assigned_user_id', ili.assigned_user_id,
+                        'assigned_user_name',
+                            CASE 
+                                WHEN ili.assigned_user_id IS NOT NULL THEN 
+                                    COALESCE(u.display_name, u.username)
+                                ELSE NULL
+                            END
+                    ) ORDER BY ili.item_id
+                ) FILTER (WHERE ili.item_id IS NOT NULL),
+                '[]'::json
+            ) as items
+        FROM item_list il
+        LEFT JOIN item_list_item ili ON il.item_list_id = ili.item_list_id
+        LEFT JOIN users u ON ili.assigned_user_id = u.user_id
+        WHERE il.event_id = $1 AND il.is_active = true
+        GROUP BY il.item_list_id
+        ORDER BY il.created_at DESC
+        "#,
+        event_id
+    )
+    .fetch_all(pool)
+    .await?;
+    
+    let mut result = Vec::new();
+    for row in rows {
+        let items: Vec<ItemListItem> = match row.items {
+            Some(items_json) => serde_json::from_value(items_json).unwrap_or_default(),
+            None => vec![],
+        };
+        
+        result.push(ItemListWithItems {
+            item_list_id: row.item_list_id,
+            event_id,
+            title: row.title,
+            created_by: 0, // не нужно для ответа
+            created_at: chrono::Utc::now(), // не нужно для ответа
+            items,
+        });
+    }
+    
+    Ok(result)
 }

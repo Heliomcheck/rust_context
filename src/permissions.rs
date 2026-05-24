@@ -15,10 +15,12 @@ impl EventPermissions {
         Self { bits }
     }
 
+    #[allow(dead_code)]
     pub fn empty() -> Self {
         Self { bits: 0 }
     }
 
+    #[allow(dead_code)]
     pub fn full() -> Self {
         Self { bits: Self::OWNER }
     }
@@ -43,17 +45,21 @@ impl EventPermissions {
     // pub const OWNER: i32 = 1 << 31;
 
     pub const OWNER:i32 = 1 << 0;
+    #[allow(dead_code)]
     pub const ADMIN:i32 = 1 << 1;
+    pub const MEMBER:i32 = 1 << 2;
 
 
     pub fn check_permission(&self, permission: i32) -> bool {
         (self.bits & permission) != 0
     }
 
+    #[allow(dead_code)]
     pub fn add_permission(&mut self, permission: i32) {
         self.bits |= permission;
     }
-    
+
+    #[allow(dead_code)]
     pub fn remove_permission(&mut self, permission: i32) {
         self.bits &= !permission;
     }
@@ -129,22 +135,17 @@ mod tests {
     use super::*;
     use crate::data_base::{event_db, user_db};
     use crate::test_utils::setup_test_db;
-    use chrono::Utc;
+
 
     #[test]
     fn test_event_permissions_basic_operations() {
         let mut permissions = EventPermissions::full();
         assert!(permissions.check_permission(EventPermissions::OWNER));
+        assert!(!permissions.check_permission(EventPermissions::ADMIN));
+        
+        // Добавляем ADMIN
+        permissions.add_permission(EventPermissions::ADMIN);
         assert!(permissions.check_permission(EventPermissions::ADMIN));
-
-        // permissions.add_permission(EventPermissions::INVITE);
-        // assert!(permissions.check_permission(EventPermissions::INVITE));
-
-        // permissions.add_permission(EventPermissions::BAN_MEMBER);
-        // assert!(permissions.check_permission(EventPermissions::BAN_MEMBER));
-
-        // permissions.remove_permission(EventPermissions::INVITE);
-        // assert!(!permissions.check_permission(EventPermissions::INVITE));
     }
 
     #[tokio::test]
@@ -158,7 +159,6 @@ mod tests {
             "Perms User",
             &None,
             &None,
-            &Some("test".to_string()),
         )
         .await?;
 

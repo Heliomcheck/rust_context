@@ -69,14 +69,12 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
 //test
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
     use tokio::sync::Mutex;
-    use tokio::{net::TcpListener, sync::broadcast};
+    use tokio::sync::broadcast;
     use crate::test_utils::setup_test_db;
     use crate::AppState;
     use crate::UserStore;
-    use crate::ChatMessage;
     use crate::VerificationStore;
 
     #[tokio::test]

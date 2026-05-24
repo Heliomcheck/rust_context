@@ -8,10 +8,6 @@ pub enum AppError {
     DbError(#[from] sqlx::Error),
     #[error("Event not found")]
     EventNotFound,
-    #[error("Member not found")]
-    MemberNotFound,
-    #[error("User not found")]
-    UserNotFound,
     #[error("Already exists")]
     Conflict,
     #[error("Invalid or expired token")]
@@ -34,8 +30,6 @@ impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         let (status, msg) = match self {
             AppError::EventNotFound => (StatusCode::NOT_FOUND, "Event not found".to_string()),
-            AppError::MemberNotFound => (StatusCode::NOT_FOUND, "Member not found".to_string()),
-            AppError::UserNotFound => (StatusCode::NOT_FOUND, "User not found".to_string()),
             AppError::Conflict => (StatusCode::CONFLICT, "Already exists".to_string()),
             AppError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token".to_string()),
             AppError::DbError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()),

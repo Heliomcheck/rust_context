@@ -3,6 +3,7 @@ use chrono::{Utc, DateTime};
 use crate::secrets::generator::Generator;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TokenStore {
     pub id: u64,
     pub user_id: u64,
@@ -12,6 +13,7 @@ pub struct TokenStore {
 }
 
 impl TokenStore {
+    #[allow(dead_code)]
     pub fn new(user_id: u64, ttl: i64) -> Self { // add id from database later
         Self {
             id: 0,
@@ -22,10 +24,12 @@ impl TokenStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_expired(&self) -> bool {
         Utc::now() > self.expires_at
     }
 
+    #[allow(dead_code)]
     pub fn is_valid(&self, input_token: &str) -> bool {
         if self.is_expired() {
             return false;

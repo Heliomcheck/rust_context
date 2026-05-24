@@ -1,12 +1,29 @@
-use tokio::{net::TcpListener, sync::broadcast};
-use anyhow::{Context, Result}; 
-use axum::{Router, extract::ws::{WebSocketUpgrade}, response::IntoResponse, routing::{self}
-        };
+use tokio::{
+    net::TcpListener, 
+    sync::broadcast
+};
+use anyhow::{
+    Context, 
+    Result
+}; 
+use axum::{
+    Router, 
+    extract::ws::WebSocketUpgrade, 
+    response::IntoResponse, 
+    routing
+};
 use axum::extract::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing_appender::{non_blocking, rolling};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_appender::{
+    non_blocking, 
+    rolling
+};
+use tracing_subscriber::{
+    fmt, 
+    prelude::*, 
+    EnvFilter
+};
 use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
 
@@ -34,14 +51,12 @@ use crate::{
     handlers::auth::*,
     handlers::user::*,
     handlers::event::*,
-    secrets::token::TokenStore,
     secrets::verification::VerificationStore,
     data_base::user_db::create_pool,
     api_doc::ApiDoc,
     handlers::modules::poll::*,
     test_utils::health_handler,
     handlers::modules::item::*,
-    handlers::modules::poll::*,
     handlers::modules::task::*,
 };
 
@@ -74,13 +89,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/auth/request_code", routing::post(request_code_handler))
         .route("/auth/verify_code", routing::post(verify_code_handler))
-        .route( "/auth/resend_code", routing::post(resend_code_handler))
+        .route("/auth/resend_code", routing::post(resend_code_handler)) //delete in future
         .route("/auth/register", routing::post(register_handler))
         .route("/auth/token_validate", routing::post(token_validate_handler))
         .route("/auth/logout", routing::post(logout_handler)) 
         .route("/auth/check_username", routing::post(username_check_handler))
 
-        .route("/user/edit", routing::post(user_edit_handler))
+        .route("/user/edit", routing::post(update_user_data_handler))
         .route("/user/get_data", routing::get(get_user_data_handler)) // user_id
         .route("/user/avatar", routing::post(upload_avatar_handler))
 
@@ -92,14 +107,21 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events", routing::post(create_event_handler))
         .route("/event/{event_id}", routing::get(get_detailed_event_handler))
         .route("/events/{event_id}", routing::put(update_event_handler))
-        .route("/events", routing::get(get_user_events_handler))
-        //.route("/events/modules", routing::get(get_event_modules_handler))
-        .route("/events/{event_id}/join", routing::post(add_user_to_event_handler))
-        .route("/events/{event_id}/delete", routing::post(delete_user_from_event_handler))
-        .route("/events/{event_id}/permissions", routing::put(update_user_permissions_handler))
+        .route("/events/{event_id}/status", routing::patch(update_event_status_handler))
+        .route("/events/{event_id}", routing::delete(delete_event_handler))
+        
+        .route("/events/", routing::get(get_user_events_handler)) // query required
+        //.route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler)) // status = ""/limit = 10/offset = 10
+        .route("/events/{event_id}/join", routing::post(event_join_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::put(update_user_permissions_handler))
+
+        .route("/events/{eventId}/planning", routing::get(get_modules_handler))
 
         .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
         .route("/events/{event_id}/planning/poll/{poll_id}", routing::post(vote_poll_handler))
+        .route("/events/{event_id}/planning/poll/{poll_id}", routing::delete(delete_poll_handler))
+        .route("/events/{event_id}/planning/poll/{poll_id}", routing::put(update_poll_handler))
 
         .route("/events/{event_id}/planning/items", routing::post(create_item_list_handler))
         .route("/events/{event_id}/planning/items/{module_id}", routing::patch(update_item_list_handler))
@@ -111,11 +133,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign", routing::post(assign_task_handler))
         .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete", routing::post(complete_task_handler))
         .route("/events/{event_id}/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
-        
-        .route("/modules/poll/create_poll", routing::post(create_poll_handler))
-        .route("/modules/poll/update_poll", routing::put(update_poll_handler))
-        .route("/modules/poll/delete_poll", routing::put(delete_poll_handler))
-        .route("/modules/poll/vote_poll", routing::post(vote_poll_handler))
+
         // .route("/events/create_item", routing::post(create_item_handler))
         // .route("/events/update_item", routing::post(update_item_handler))
         // .route("/events/create_task", routing::post(create_task_handler))
@@ -135,6 +153,7 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 #[axum_macros::debug_handler]
+#[allow(dead_code)]
 async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,

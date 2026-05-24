@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 use chrono::{DateTime, Utc};
+#[allow(unused_imports)]
 use crate::{
     errors::AppError,
     structs::*,
@@ -10,22 +11,24 @@ use std::string::String;
 
 pub async fn create_event(
     pool: &PgPool,
-    event_name: &str,
+    title: &str,
     description_event: Option<String>,
-    start_date: Option<DateTime<Utc>>,
-    end_date: Option<DateTime<Utc>>,
+    start_date_time: Option<DateTime<Utc>>,
+    end_date_time: Option<DateTime<Utc>>,
     color: String
 ) -> Result<i64, AppError> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO events (event_name, description_event, start_date, end_date, color)
+        INSERT INTO events (
+            title, description_event, start_date_time, end_date_time, color
+        )
         VALUES ($1, $2, $3, $4, $5)
         RETURNING event_id
         "#,
-        event_name,
+        title,
         description_event,
-        start_date,
-        end_date,
+        start_date_time,
+        end_date_time,
         color
     )
     .fetch_one(pool)
@@ -40,7 +43,7 @@ pub async fn get_event_by_id(
 ) -> Result<Events, AppError> {
     let row = sqlx::query!(
         r#"
-        SELECT event_id, event_name, description_event, start_date, end_date, color, created_at, status_event, location
+        SELECT event_id, title, description_event, start_date_time, end_date_time, color, created_at, status_event, location
         FROM events
         WHERE event_id = $1
         "#,
@@ -51,11 +54,11 @@ pub async fn get_event_by_id(
     .ok_or(AppError::EventNotFound)?;
 
     Ok( Events {
-        event_name: row.event_name,
+        title: row.title,
         event_id: event_id,
         description_event: row.description_event,
-        start_date: row.start_date,
-        end_date: row.end_date,
+        start_date_time: row.start_date_time,
+        end_date_time: row.end_date_time,
         color: row.color,
         created_at: row.created_at,
         status_event: row.status_event,
@@ -71,16 +74,15 @@ pub async fn get_user_events(
 ) -> Result<Vec<Events>, AppError> {
     let rows = sqlx::query!(
         r#"
-        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, 
+        SELECT e.event_id, e.title, e.description_event, e.start_date_time, e.end_date_time, 
             e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
         WHERE eu.user_id = $1
         ORDER BY 
             CASE e.status_event
-                WHEN 'OPEN' THEN 1
-                WHEN 'CANCELLED' THEN 2
-                WHEN 'ARCHIVED' THEN 3
+                WHEN 'ACTIVE' THEN 1
+                WHEN 'ARCHIVED' THEN 2
                 ELSE 99
             END ASC,
             e.created_at DESC
@@ -95,10 +97,10 @@ pub async fn get_user_events(
 
     Ok(rows.into_iter().map(|r| Events {
         event_id: r.event_id,
-        event_name: r.event_name,
+        title: r.title,
         description_event: r.description_event,
-        start_date: r.start_date,
-        end_date: r.end_date,
+        start_date_time: r.start_date_time,
+        end_date_time: r.end_date_time,
         created_at: r.created_at,
         status_event: r.status_event,
         color: r.color,
@@ -106,7 +108,7 @@ pub async fn get_user_events(
     }).collect())
 }
 
-
+#[allow(dead_code)]
 pub async fn get_user_event(
     pool: &PgPool,
     user_id: i64,
@@ -115,7 +117,7 @@ pub async fn get_user_event(
 ) -> Result<Events, AppError> {
     let row = sqlx::query!(
         r#"
-        SELECT e.event_id, e.event_name, e.description_event, e.start_date, e.end_date, e.status_event, e.created_at, e.color, e.location
+        SELECT e.event_id, e.title, e.description_event, e.start_date_time, e.end_date_time, e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
         WHERE eu.user_id = $1
@@ -131,10 +133,10 @@ pub async fn get_user_event(
 
     Ok(Events {
         event_id: row.event_id,
-        event_name: row.event_name,
+        title: row.title,
         description_event: row.description_event,
-        start_date: row.start_date,
-        end_date: row.end_date,
+        start_date_time: row.start_date_time,
+        end_date_time: row.end_date_time,
         created_at: row.created_at,
         status_event: row.status_event,
         color: row.color,
@@ -150,7 +152,8 @@ pub async fn get_users_in_event(
         r#"
         SELECT 
             u.user_id,
-            COALESCE(u.display_name, u.username) AS name
+            COALESCE(u.display_name, u.username) AS name,
+            eu.permissions
         FROM event_user eu
         JOIN users u ON eu.user_id = u.user_id
         WHERE eu.event_id = $1
@@ -166,7 +169,8 @@ pub async fn get_users_in_event(
         .into_iter()
         .map(|row| EventParticipant {
             user_id: row.user_id,
-            name: row.name.unwrap_or_else(|| "Unknown".to_string()),
+            display_name: row.name.unwrap_or_else(|| "Unknown".to_string()),
+            permissions: row.permissions.to_string(),
         })
         .collect())
 }
@@ -195,6 +199,7 @@ pub async fn check_user_in_event(
     }
 }
 
+#[cfg(test)]
 pub async fn get_event_members(
     pool: &PgPool,
     event_id: i64,
@@ -224,32 +229,29 @@ pub async fn get_event_members(
 pub async fn update_event(
     pool: &PgPool,
     event_id: i64,
-    event_name: Option<String>,
+    title: Option<String>,
     description_event: Option<String>,
-    start_date: Option<DateTime<Utc>>,
-    end_date: Option<DateTime<Utc>>,
+    start_date_time: Option<DateTime<Utc>>,
+    end_date_time: Option<DateTime<Utc>>,
     color: Option<String>,
-    location: Option<String>,
-    status_event: Option<String>
+    location: Option<String>
 ) -> Result<(), AppError> {
     sqlx::query!(
         r#"
         UPDATE events
         SET 
-            event_name = COALESCE($1, event_name),
+            title = COALESCE($1, title),
             description_event = COALESCE($2, description_event),
-            start_date = COALESCE($3, start_date),
-            end_date = COALESCE($4, end_date),
-            status_event = COALESCE($5, status_event),
-            color = COALESCE($6, color),
-            location = COALESCE($7, location)
-        WHERE event_id = $8
+            start_date_time = COALESCE($3, start_date_time),
+            end_date_time = COALESCE($4, end_date_time),
+            color = COALESCE($5, color),
+            location = COALESCE($6, location)
+        WHERE event_id = $7
         "#,
-        event_name,
+        title,
         description_event,
-        start_date,
-        end_date,
-        status_event,
+        start_date_time,
+        end_date_time,
         color,
         location,
         event_id
@@ -280,7 +282,7 @@ pub async fn update_event_status(
     Ok(())
 }
 
-
+#[allow(dead_code)]
 pub async fn find_users_by_permission(
     pool: &PgPool,
     event_id: i64,
@@ -346,6 +348,7 @@ pub async fn remove_member(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn update_member_role(
     pool: &PgPool,
     user_id: i64,
@@ -391,40 +394,42 @@ pub async fn has_permission(
     Ok(row)
 }
 
-pub async fn create_event_url(
+#[allow(dead_code)]
+pub async fn create_event_token(
     pool: &PgPool,
     event_id: i64,
     expires_in_hours: i64,
 ) -> Result<String, AppError> {
-    let event_url = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
+    let event_token = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
     
     sqlx::query!(
         r#"
-        INSERT INTO event_url (event_url, event_id, expires_at)
+        INSERT INTO event_token (event_token, event_id, expires_at)
         VALUES ($1, $2, $3)
         "#,
-        event_url,
+        event_token,
         event_id,
         expires_at
     )
     .execute(pool)
     .await?;
     
-    Ok(event_url)
+    Ok(event_token)
 }
 
+#[allow(dead_code)]
 pub async fn get_event_id_by_token(
     pool: &PgPool,
-    event_url: &str,
+    event_token: &str,
 ) -> Result<Option<i64>, AppError> {
     let row = sqlx::query!(
         r#"
         SELECT event_id
-        FROM event_url
-        WHERE event_url = $1 AND expires_at > NOW()
+        FROM event_token
+        WHERE event_token = $1 AND expires_at > NOW()
         "#,
-        event_url
+        event_token
     )
     .fetch_optional(pool)
     .await?;
@@ -432,6 +437,7 @@ pub async fn get_event_id_by_token(
     Ok(row.map(|r| r.event_id))
 }
 
+#[allow(dead_code)]
 pub async fn is_user_in_event(
     pool: &PgPool,
     user_id: i64,
@@ -452,13 +458,119 @@ pub async fn is_user_in_event(
     
     Ok(row.exists)
 }
+
+pub async fn delete_event(
+    pool: &PgPool,
+    event_id: i64,
+) -> Result<(), AppError> {
+    // Начинаем транзакцию
+    let mut tx = pool.begin().await?;
+    
+    // 1. Удаляем всех участников события
+    sqlx::query!(
+        r#"
+        DELETE FROM event_user
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // 2. Удаляем invite токены
+    sqlx::query!(
+        r#"
+        DELETE FROM event_token
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // 3. Удаляем опросы и связанные с ними данные
+    // Сначала удаляем голоса
+    sqlx::query!(
+        r#"
+        DELETE FROM poll_votes
+        WHERE poll_id IN (SELECT poll_id FROM poll WHERE event_id = $1)
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // Удаляем варианты опросов
+    sqlx::query!(
+        r#"
+        DELETE FROM poll_option
+        WHERE poll_id IN (SELECT poll_id FROM poll WHERE event_id = $1)
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // Удаляем сами опросы
+    sqlx::query!(
+        r#"
+        DELETE FROM poll
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // 4. Удаляем item_list'ы и их пункты (CASCADE сделает это автоматически)
+    sqlx::query!(
+        r#"
+        DELETE FROM item_list
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // 5. Удаляем task_list'ы и их задачи (CASCADE сделает это автоматически)
+    sqlx::query!(
+        r#"
+        DELETE FROM task_list
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    
+    // 6. Удаляем само событие
+    let rows_affected = sqlx::query!(
+        r#"
+        DELETE FROM events
+        WHERE event_id = $1
+        "#,
+        event_id
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    
+    if rows_affected == 0 {
+        return Err(AppError::NotFound("Event not found".to_string()));
+    }
+    
+    // Коммитим транзакцию
+    tx.commit().await?;
+    
+    Ok(())
+}
 //test
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::setup_test_db;
     use crate::data_base::user_db::create_user_db;
-    use chrono::Utc;
 
 //EVENT
     #[tokio::test]
@@ -473,7 +585,7 @@ mod tests {
             "#123456".to_string(),
         ).await?;
         let event = get_event_by_id(&pool, event_id).await?;
-        assert_eq!(event.event_name, "Test Event");
+        assert_eq!(event.title, "Test Event");
         assert_eq!(event.color, "#123456");
         Ok(())
     }
@@ -505,11 +617,10 @@ mod tests {
             None,
             None,
             Some("#654321".to_string()),
-            Some("1".to_string()),
-            Some("OPEN".to_string())
+            Some("1".to_string())
         ).await?;
         let event = get_event_by_id(&pool, event_id).await?;
-        assert_eq!(event.event_name, "New");
+        assert_eq!(event.title, "New");
         Ok(())
     }
 
@@ -542,7 +653,6 @@ mod tests {
             "User One",
             &None,
             &None,
-            &None
         ).await?;
         let event_id = create_event(
             &pool, 
@@ -568,7 +678,6 @@ mod tests {
             "User Two",
             &None,
             &None,
-            &None
         ).await?;
         let event_id = create_event(
             &pool, "Event", 
@@ -594,7 +703,6 @@ mod tests {
             "User Three",
             &None,
             &None,
-            &None
         ).await?;
         let event_id = create_event(
             &pool, "Event", 
@@ -620,7 +728,6 @@ mod tests {
             "User Four",
             &None,
             &None,
-            &None
         ).await?;
         let event_id = create_event(
             &pool, "Event", 
@@ -647,7 +754,6 @@ mod tests {
             "User Five",
             &None,
             &None,
-            &None
         ).await?;
         let event_id = create_event(
             &pool, "Event", 
@@ -674,8 +780,8 @@ mod tests {
             None,
             "#123456".to_string()
         ).await?;
-        let event_url = create_event_url(&pool, event_id, 1).await?;
-        let found_event_id = get_event_id_by_token(&pool, &event_url).await?;
+        let event_token = create_event_token(&pool, event_id, 1).await?;
+        let found_event_id = get_event_id_by_token(&pool, &event_token).await?;
         assert_eq!(found_event_id.unwrap(), event_id);
         Ok(())
     }
@@ -690,7 +796,6 @@ mod tests {
             "User Event",
             &None,
             &None,
-            &None
         )
         .await?;
         let event_id = create_event(
@@ -719,7 +824,6 @@ mod tests {
             "User List",
             &None,
             &None,
-            &None
         )
         .await?;
         let event_id = create_event(
@@ -749,7 +853,6 @@ mod tests {
             "User Check",
             &None,
             &None,
-            &None
         )
         .await?;
         let event_id = create_event(
@@ -778,7 +881,6 @@ mod tests {
             "Member User",
             &None,
             &None,
-            &None
         )
         .await?;
         let event_id = create_event(
@@ -810,7 +912,6 @@ mod tests {
             "Perm User",
             &None,
             &None,
-            &None
         )
         .await?;
         let event_id = create_event(
@@ -822,7 +923,9 @@ mod tests {
             "#123456".to_string()
         )
         .await?;
-        add_member(&pool, user_id, event_id, 10).await?;
+        
+        // Даём права, которые включают бит 4 (например, 4, 5, 6, 7, 12, 13, 14, 15)
+        add_member(&pool, user_id, event_id, 4).await?;  // 👈 меняем на 4
 
         let users = find_users_by_permission(&pool, event_id, 4).await?;
         assert_eq!(users, vec![user_id]);

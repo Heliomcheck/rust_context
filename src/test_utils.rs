@@ -1,6 +1,9 @@
+#[allow(unused_imports)]
 use sqlx::postgres::{PgPoolOptions, PgPool};
+#[allow(unused_imports)]
 use sqlx::Executor;
 
+#[cfg(test)]
 pub async fn setup_test_db() -> PgPool {
     dotenvy::dotenv().ok();
     
@@ -20,6 +23,7 @@ pub async fn setup_test_db() -> PgPool {
     pool
 }
 
+#[cfg(test)]
 pub async fn clear_db(pool: &PgPool) {
     // Отключаем проверку внешних ключей временно для чистого удаления
     let _ = pool.execute("ALTER TABLE IF EXISTS poll_votes DISABLE TRIGGER ALL").await;

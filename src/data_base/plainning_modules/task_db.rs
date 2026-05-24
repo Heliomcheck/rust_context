@@ -320,3 +320,61 @@ pub async fn verify_task_list_in_event(
 
     Ok(row.exists)
 }
+
+pub async fn get_event_task_lists(
+    pool: &PgPool,
+    event_id: i64,
+) -> Result<Vec<TaskListWithItems>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT 
+            tl.task_list_id,
+            tl.title,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'task_id', tli.task_id,
+                        'task_text', tli.task_text,
+                        'assigned_user_id', tli.assigned_user_id,
+                        'assigned_user_name',
+                            CASE 
+                                WHEN tli.assigned_user_id IS NOT NULL THEN 
+                                    COALESCE(u.display_name, u.username)
+                                ELSE NULL
+                            END,
+                        'is_completed', tli.is_completed
+                    ) ORDER BY tli.task_id
+                ) FILTER (WHERE tli.task_id IS NOT NULL),
+                '[]'::json
+            ) as tasks
+        FROM task_list tl
+        LEFT JOIN task_list_item tli ON tl.task_list_id = tli.task_list_id
+        LEFT JOIN users u ON tli.assigned_user_id = u.user_id
+        WHERE tl.event_id = $1 AND tl.is_active = true
+        GROUP BY tl.task_list_id
+        ORDER BY tl.created_at DESC
+        "#,
+        event_id
+    )
+    .fetch_all(pool)
+    .await?;
+    
+    let mut result = Vec::new();
+    for row in rows {
+        let tasks: Vec<TaskListItem> = match row.tasks {
+            Some(tasks_json) => serde_json::from_value(tasks_json).unwrap_or_default(),
+            None => vec![],
+        };
+        
+        result.push(TaskListWithItems {
+            task_list_id: row.task_list_id,
+            event_id,
+            title: row.title,
+            created_by: 0,
+            created_at: chrono::Utc::now(),
+            tasks,
+        });
+    }
+    
+    Ok(result)
+}

@@ -1,39 +1,33 @@
-use futures_util::future::ok;
-use tokio::{net::TcpListener, sync::broadcast};
-use anyhow::{Context}; 
-use axum::{Router, extract::ws::{WebSocket, WebSocketUpgrade}, response::IntoResponse, routing::{self, trace}
-        };
-use axum_macros::debug_handler;
-use axum::extract::{State};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use axum::Json;
+use axum::{
+    Json, 
+    http::StatusCode,
+    http::header::{self, HeaderMap},
+    extract::{Path,State},
+    response::IntoResponse
+};
 use validator::Validate;
-use axum::http::StatusCode;
 use serde_json::json;
-//use axum_auth::{Json, TypedHeader, headers::{Authorization, authorization::Bearer}};
-use axum_extra::TypedHeader;
-use headers::{Authorization, authorization::Bearer};
+use headers::{
+    Authorization, 
+    authorization::Bearer
+};
 use sqlx::PgPool;
 use tracing::*;
-use axum::body::Body;
 use tokio::fs;
-use axum_extra::extract::multipart::Multipart;
-use axum::extract::Path;
-use std::path::PathBuf;
-use crate::test_utils::setup_test_db;
-use tower::ServiceExt;
-use axum::http::{Request, Response};
-use chrono::Utc;
-use axum::http::header::{self, HeaderMap};
-
-use crate::{data_base::user_db::find_user_by_token, secrets::generator, models::CheckUsernameRequest, secrets::token::{self, TokenStore}, structs::*};
+use axum_extra::{
+    extract::multipart::Multipart, 
+    TypedHeader
+};
+use std::{
+    sync::Arc, 
+    path::PathBuf
+};
 
 use crate::{
     models::*,
-    user_store::*,
-    secrets::verification::VerificationStore,
-    data_base::user_db::*
+    data_base::user_db::*,
+    errors::AppError,
+    structs::*,
 };
 
 
@@ -52,45 +46,31 @@ use crate::{
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
-pub async fn user_edit_handler(
+pub async fn update_user_data_handler(
         auth: TypedHeader<Authorization<Bearer>>,
         State(state): State<Arc<AppState>>,
         Json(payload): Json<EditUserRequest>,
-    ) -> impl IntoResponse {
+    ) -> Result<impl IntoResponse, AppError> {
     if let Err(errors) = payload.validate() {
-        return validation_errors_to_response(errors);
+        return Err(validation_errors_to_response(errors));
     }
-
-    let token = auth.token();
     
-    let user = match find_user_by_token(&state.db_pool, token).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
-            tracing::error!("User not found");
-            return (StatusCode::UNAUTHORIZED, Json(json!({"error": "User not found"})));
-        }
-        Err(e) => {
-            tracing::error!("Token validation error: {}", e);
-            return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Invalid session"})));
-        }
-    };
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
     
     if let Err(e) = edit_user_db(
         &state.db_pool,
         user.user_id,
         payload.username.as_deref(),
-        payload.email.as_deref(),
         payload.display_name.as_deref(),
         payload.birthday.as_deref(),
-        payload.avatar_url.as_deref(),
         payload.description.as_deref()
     ).await {
         tracing::error!("Failed to update user: {}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to update user"})));
+        (AppError::Internal("Failed to update user".to_string()));
     }
     // update user data un UserStore in future
     
-    (StatusCode::OK, Json(json!({ "success": true })))
+    Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
 }
 
 #[utoipa::path(
@@ -110,19 +90,8 @@ pub async fn user_edit_handler(
 pub async fn get_user_data_handler(
     auth: TypedHeader<Authorization<Bearer>>,
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    let token = auth.token();
-    
-    let user = match find_user_by_token(&state.db_pool, token).await {
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid or expired token" })));
-        }
-        Err(e) => {
-            error!("Failed to find user by token: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
-        }
-    };
+) -> Result<impl IntoResponse, AppError> {
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
     
     let response = UserDataResponse {
         user_id: user.user_id,
@@ -132,13 +101,13 @@ pub async fn get_user_data_handler(
         birthday: user.birthday.clone()
     };
     
-    (StatusCode::OK, Json(json!({"user": response})))
+    Ok((StatusCode::OK, Json(json!({"user": response}))))
 }
 
 const UPLOAD_DIR: &str = "uploads/avatars";
 #[utoipa::path(
     post,
-    path = "/user/upload_avatar",
+    path = "/user/avatar",
     tag = "User",
     request_body = Multipart,
     //request_body(
@@ -161,17 +130,8 @@ pub async fn upload_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
     mut multipart: Multipart,
-) -> impl IntoResponse {
-    let token = auth.token();
-    
-    let user = match find_user_by_token(&state.db_pool, token).await {
-        Ok(Some(u)) => u,
-        Ok(None) => return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid token" }))),
-        Err(e) => {
-            error!("DB error: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Database error" })));
-        }
-    };
+) -> Result<impl IntoResponse, AppError> {
+    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
     
     while let Ok(Some(field)) = multipart.next_field().await {
         if field.name() != Some("avatar") {
@@ -192,7 +152,7 @@ pub async fn upload_avatar_handler(
             Ok(d) => d,
             Err(e) => {
                 error!("Failed to read file: {}", e);
-                return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Failed to read file" })));
+                return Err(AppError::BadRequest("Failed to read file".to_string()));
             }
         };
         
@@ -200,10 +160,10 @@ pub async fn upload_avatar_handler(
         
         if let Err(e) = fs::create_dir_all(&user_dir).await {
             error!("Failed to create user dir: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error" })));
+            return Err(AppError::Internal("Failed to create user dir".to_string()));
         }
         
-        let old_avatar_path = user_dir.join("avatar.*"); // delete old avatar
+        let _ = user_dir.join("avatar.*"); // delete old avatar
         if let Ok(mut entries) = fs::read_dir(&user_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let name = entry.file_name();
@@ -218,19 +178,19 @@ pub async fn upload_avatar_handler(
         
         if let Err(e) = fs::write(&save_path, data).await {
             error!("Failed to save file: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to save file" })));
+            return Err(AppError::Internal("Failed to save file".to_string()));
         }
         
         let avatar_url = format!("/user/avatar");
         if let Err(e) = update_user_avatar(&state.db_pool, user.user_id, &avatar_url).await {
             error!("Failed to update avatar URL: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to update avatar" })));
+            return Err(AppError::Internal("Failed to update avatar".to_string()));
         }
         
-        return (StatusCode::OK, Json(json!({ "success": true})));
+        return Ok((StatusCode::OK, Json(SuccessResponse{success: true})));
     }
     
-    (StatusCode::BAD_REQUEST, Json(json!({ "error": "No file provided" })))
+    return Err(AppError::BadRequest("No file provided".to_string()));
 }
 
 #[utoipa::path(
@@ -252,19 +212,19 @@ pub async fn upload_avatar_handler(
 pub async fn get_avatar_handler(
     headers: HeaderMap,
     Path(user_id): Path<i64>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, AppError> {
     let current_etag = compute_avatar_etag(user_id).await.unwrap_or("\"\"".to_string()); // compute etag
 
     if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) { // check 
         if if_none_match.to_str().unwrap_or("") == current_etag {
-            return StatusCode::NOT_MODIFIED.into_response();
+            return Ok((StatusCode::NOT_MODIFIED).into_response());
         }
     }
 
     let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
     
     if !user_dir.exists() {
-        return (StatusCode::NOT_FOUND, Json(json!({ "error": "Avatar not found" }))).into_response();
+        return Err(AppError::NotFound("Avatar not found".to_string()));
     }
     
     let mut avatar_path = None; // find avatar.*
@@ -280,20 +240,20 @@ pub async fn get_avatar_handler(
     
     let path = match avatar_path {
         Some(p) => p,
-        None => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Avatar not found" }))).into_response(),
+        None => return Err(AppError::NotFound("Avatar not found".to_string())),
     };
     
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
     
     match fs::read(&path).await {
-        Ok(data) => (
+        Ok(data) => Ok((
             StatusCode::OK,
             [(axum::http::header::CONTENT_TYPE, mime.to_string())],
             data,
-        ).into_response(),
+        ).into_response()),
         Err(e) => {
             error!("Failed to read file: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Failed to read file" }))).into_response()
+            Err(AppError::Internal("Failed to read file".to_string()))
         }
     }
 }
@@ -322,87 +282,150 @@ pub async fn compute_avatar_etag(user_id: i64) -> Result<String, std::io::Error>
     Ok(format!("\"{}\"", hash.to_hex()))
 }
 
-#[tokio::test]// Проверяет, что запрос без валидного токена возвращает UNAUTHORIZED
-async fn test_get_user_data_handler_unauthorized() {
-    let pool = setup_test_db().await;
-    let state = Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        user_store: Arc::new(Mutex::new(UserStore::new())),
-        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: pool
-    });
-    let app = Router::new()
-        .route("/user/get-data", routing::get(get_user_data_handler))
-        .with_state(state);
-    let request = Request::builder()
-        .method("GET")
-        .uri("/user/get-data")
-        .header("Authorization", "Bearer invalid")
-        .body(Body::empty())
-        .unwrap();
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-#[tokio::test]// Проверяет, что редактирование пользователя без валидного токена запрещено
-async fn test_user_edit_handler_unauthorized() {
-    let pool = setup_test_db().await;
-    let state = Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        user_store: Arc::new(Mutex::new(UserStore::new())),
-        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: pool
-    });
-    let app = Router::new()
-        .route("/user/edit", routing::post(user_edit_handler))
-        .with_state(state);
-    let payload = json!({
-        "username": "newname"
-    });
-    let request = Request::builder()
-        .method("POST")
-        .uri("/user/edit")
-        .header("Authorization", "Bearer invalid")
-        .header("content-type", "application/json")
-        .body(Body::from(payload.to_string()))
-        .unwrap();
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+pub async fn get_user_for_handler_from_token(pool: &PgPool, token: &str) -> Result<User, AppError> {
+    let user = match find_user_by_token(pool, token).await {
+        Ok(Some(user)) => {
+            update_last_online(pool, user.user_id).await?;
+            user
+        },
+        Ok(None) => {
+            tracing::error!("User not found");
+            return Err(AppError::InvalidToken);
+        }
+        Err(e) => {
+            tracing::error!("Token validation error: {}", e);
+            return Err(AppError::InvalidToken);
+        }
+    };
+    Ok(user)
 }
 
-#[tokio::test]// Проверяет успешное получение данных пользователя по токену
-async fn test_get_user_data_success() {
-    let pool = setup_test_db().await;
-    let user_id = create_user_db(
-        &pool,
-        "user1",
-        "user1@mail.com",
-        "User",
-        &None,
-        &None,
-        &Some("test".to_string())
-    ).await.unwrap();
-    let token = "valid_token";
-    create_token(
-        &pool,
-        user_id,
-        token,
-        Utc::now() + chrono::Duration::hours(1),
-    ).await.unwrap();
-    let state = Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        user_store: Arc::new(Mutex::new(UserStore::new())),
-        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: pool,
-    });
-    let app = Router::new()
-        .route("/user/get-data", routing::get(get_user_data_handler))
-        .with_state(state);
-    let request = Request::builder()
-        .method("GET")
-        .uri("/user/get-data")
-        .header("Authorization", format!("Bearer {}", token))
-        .body(Body::empty())
-        .unwrap();
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+pub async fn get_user_for_handler_from_id(pool: &PgPool, user_id: i64) -> Result<User, AppError> {
+    let user = match find_user_by_id(pool, user_id).await {
+        Ok(Some(user)) => {
+            update_last_online(pool, user.user_id).await?;
+            user
+        },
+        Ok(None) => {
+            tracing::error!("User not found");
+            return Err(AppError::InvalidToken);
+        }
+        Err(e) => {
+            tracing::error!("Token validation error: {}", e);
+            return Err(AppError::InvalidToken);
+        }
+    };
+    Ok(user)
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::sync::{
+        broadcast,
+        Mutex
+    }; 
+    use axum::{
+        Router, 
+        routing,
+        body::Body,
+        http::Request,
+        http::StatusCode
+    };
+    use std::sync::Arc;
+    use serde_json::json;
+    use tower::ServiceExt;
+    use chrono::Utc;
+
+    use crate::{
+        user_store::*,
+        secrets::verification::VerificationStore,
+        data_base::user_db::*,
+        test_utils::setup_test_db,
+        structs::*,
+        *
+    };
+
+    #[tokio::test]// Проверяет, что запрос без валидного токена возвращает UNAUTHORIZED
+    async fn test_get_user_data_handler_unauthorized() {
+        let pool = setup_test_db().await;
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool
+        });
+        let app = Router::new()
+            .route("/user/get-data", routing::get(get_user_data_handler))
+            .with_state(state);
+        let request = Request::builder()
+            .method("GET")
+            .uri("/user/get-data")
+            .header("Authorization", "Bearer invalid")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    #[tokio::test]// Проверяет, что редактирование пользователя без валидного токена запрещено
+    async fn test_user_edit_handler_unauthorized() {
+        let pool = setup_test_db().await;
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool
+        });
+        let app = Router::new()
+            .route("/user/edit", routing::post(update_user_data_handler))
+            .with_state(state);
+        let payload = json!({
+            "username": "newname"
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/user/edit")
+            .header("Authorization", "Bearer invalid")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]// Проверяет успешное получение данных пользователя по токену
+    async fn test_get_user_data_success() {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(
+            &pool,
+            "user1",
+            "user1@mail.com",
+            "User",
+            &None,
+            &None,
+        ).await.unwrap();
+        let token = "valid_token";
+        create_token(
+            &pool,
+            user_id,
+            token,
+            Utc::now() + chrono::Duration::hours(1),
+        ).await.unwrap();
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        let app = Router::new()
+            .route("/user/get-data", routing::get(get_user_data_handler))
+            .with_state(state);
+        let request = Request::builder()
+            .method("GET")
+            .uri("/user/get-data")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

@@ -1,10 +1,25 @@
 use sqlx::PgPool;
 use std::str;
+use std::collections::HashMap;
+use crate::models::PollVote;
 
 use crate::{
     errors::AppError,
     structs::*,
 };
+
+pub struct PollWithVotes {
+    pub options: Vec<String>,
+    pub votes: Vec<PollVote>,
+    pub votes_count: Vec<i32>,
+    pub own_vote: Vec<i32>,
+}
+
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct PollVote {
+//     pub option_index: i32,
+//     pub user_id: String,
+// }
 
 pub async fn create_poll(
     pool: &PgPool, 
@@ -85,7 +100,6 @@ pub async fn vote_on_poll(
     user_id: i64,
     option_ids: Vec<i64>,
 ) -> Result<bool, sqlx::Error> {
-    // 3. Удаляем все старые голоса пользователя
     sqlx::query!(
         r#"
         DELETE FROM poll_votes
@@ -97,7 +111,6 @@ pub async fn vote_on_poll(
     .execute(pool)
     .await?;
 
-    // 4. Добавляем новые голоса
     for option_id in option_ids {
         sqlx::query!(
             r#"
@@ -184,14 +197,82 @@ pub async fn get_event_polls(
 
     Ok(polls)
 }
+
+pub async fn get_poll_with_votes(
+    pool: &PgPool,
+    poll_id: i64,
+    current_user_id: i64,
+) -> Result<PollWithVotes, AppError> {
+    // Получаем опции опроса
+    let options_rows = sqlx::query!(
+        r#"
+        SELECT option_id, option_text
+        FROM poll_option
+        WHERE poll_id = $1
+        ORDER BY option_id
+        "#,
+        poll_id
+    )
+    .fetch_all(pool)
+    .await?;
+    
+    let options: Vec<String> = options_rows
+        .iter()
+        .map(|row| row.option_text.clone())
+        .collect();
+    
+    // Создаём маппинг option_id -> индекс
+    let option_index_map: HashMap<i64, i32> = options_rows
+        .iter()
+        .enumerate()
+        .map(|(idx, row)| (row.option_id, idx as i32))
+        .collect();
+    
+    // Получаем все голоса
+    let votes_rows = sqlx::query!(
+        r#"
+        SELECT pv.user_id, pv.option_id, u.display_name, u.username
+        FROM poll_votes pv
+        JOIN users u ON pv.user_id = u.user_id
+        WHERE pv.poll_id = $1
+        "#,
+        poll_id
+    )
+    .fetch_all(pool)
+    .await?;
+    
+    let mut votes: Vec<PollVote> = Vec::new();
+    let mut votes_count = vec![0; options.len()];
+    let mut own_vote = Vec::new();
+    
+    for row in votes_rows {
+        if let Some(option_index) = option_index_map.get(&row.option_id) {
+            votes_count[*option_index as usize] += 1;
+            
+            votes.push(PollVote {
+                option_index: *option_index,
+                user_id: row.user_id.to_string(),
+            });
+            
+            if row.user_id == current_user_id {
+                own_vote.push(*option_index);
+            }
+        }
+    }
+    
+    Ok(PollWithVotes {
+        options,
+        votes,
+        votes_count,
+        own_vote,
+    })
+}
 //test
 #[cfg(test)]
 mod tests{
-    use crate::data_base;
     use crate::permissions::EventPermissions;
 
     use super::*;
-    use sqlx::{PgPool, Executor};
     use crate::data_base::event_db::create_event;
     use crate::data_base::user_db::create_user_db;
     use crate::data_base::event_db::add_member;
@@ -208,7 +289,6 @@ mod tests{
             "testuser1",
             "test1@example.com",
             "Test User 1",
-            &None,
             &None,
             &None,
         )
@@ -256,7 +336,6 @@ mod tests{
             "Test User 2",
             &None,
             &None,
-            &None,
         )
         .await
         .unwrap();
@@ -302,7 +381,6 @@ mod tests{
             "Voter",
             &None,
             &None,
-            &None,
         )
         .await
         .unwrap();
@@ -313,7 +391,6 @@ mod tests{
             "creator",
             "creator@example.com",
             "Creator",
-            &None,
             &None,
             &None,
         )
@@ -401,7 +478,6 @@ mod tests{
             "Delete User",
             &None,
             &None,
-            &None,
         )
         .await
         .unwrap();
@@ -458,7 +534,6 @@ mod tests{
             "edituser",
             "edit@example.com",
             "Edit User",
-            &None,
             &None,
             &None,
         )
@@ -520,7 +595,6 @@ mod tests{
             "eventpolls",
             "eventpolls@example.com",
             "Event Polls User",
-            &None,
             &None,
             &None,
         )

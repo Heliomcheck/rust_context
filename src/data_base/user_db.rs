@@ -22,20 +22,18 @@ pub async fn create_user_db(
     email: &str,
     display_name: &str,
     birthday: &Option<String>,
-    avatar_url: &Option<String>,
     description_profile: &Option<String>
 ) -> Result<i64, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO users (username, email, display_name, birthday, avatar_url, description_profile)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (username, email, display_name, birthday, description_profile)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING user_id
         "#, 
         username, 
         email, 
         display_name, 
         birthday.clone(), 
-        avatar_url.clone(),
         description_profile.clone()
     )
     .fetch_one(pool)
@@ -48,29 +46,23 @@ pub async fn edit_user_db(
     pool: &PgPool,
     user_id: i64,
     username: Option<&str>,
-    email: Option<&str>,
     display_name: Option<&str>,
     birthday: Option<&str>,
-    avatar_url: Option<&str>,
     description_profile: Option<&str>
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE users
         SET username = COALESCE($1, username),
-            email = COALESCE($2, email),
-            display_name = COALESCE($3, display_name),
-            birthday = COALESCE($4, birthday),
-            avatar_url = COALESCE($5, avatar_url),
-            description_profile = COALESCE($6, description_profile)
-        WHERE user_id = $7
+            display_name = COALESCE($2, display_name),
+            birthday = COALESCE($3, birthday),
+            description_profile = COALESCE($4, description_profile)
+        WHERE user_id = $5
         "#
     )
     .bind(username)
-    .bind(email)
     .bind(display_name)
     .bind(birthday)
-    .bind(avatar_url)
     .bind(description_profile)
     .bind(user_id)
     .execute(pool)
@@ -116,7 +108,7 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT user_id, username, email, display_name, birthday, avatar_url,
+        SELECT user_id, username, email, display_name, birthday,
                is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE user_id = $1 AND is_deleted = false
@@ -136,7 +128,7 @@ pub async fn find_user_by_username(
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT user_id, username, email, display_name, birthday, avatar_url,
+        SELECT user_id, username, email, display_name, birthday,
                is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE username = $1 AND is_deleted = false
@@ -174,7 +166,7 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, sqlx::Er
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT u.user_id, u.username, u.email, u.display_name, u.birthday, u.avatar_url,
+        SELECT u.user_id, u.username, u.email, u.display_name, u.birthday,
                u.is_deleted, u.created_at, u.last_online_at, description_profile
         FROM users u
         JOIN token_store t ON u.user_id = t.user_id
@@ -206,6 +198,7 @@ pub async fn deactivate_token(pool: &PgPool, token: &str) -> Result<(), sqlx::Er
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn deactivate_all_user_tokens(pool: &PgPool, user_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -238,6 +231,7 @@ pub async fn find_token_by_user_id(pool: &PgPool, user_id: i64) -> Result<Option
     Ok(row.map(|r| r.token))
 }
 
+#[allow(dead_code)]
 pub async fn refresh_token(
     pool: &PgPool,
     old_token: &str,
@@ -266,6 +260,7 @@ pub async fn refresh_token(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn cleanup_expired_tokens(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query!(
         r#"
@@ -303,7 +298,7 @@ pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { /
     let users = sqlx::query_as!(
         User,
         r#"
-        SELECT user_id, username, email, display_name, birthday, avatar_url,
+        SELECT user_id, username, email, display_name, birthday,
                is_deleted, created_at, last_online_at, description_profile
         FROM users
         WHERE is_deleted = false
@@ -313,6 +308,21 @@ pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { /
     .await?;
     
     Ok(users)
+}
+
+pub async fn update_last_online(pool: &PgPool, user_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE users
+        SET last_online_at = NOW()
+        WHERE user_id = $1
+        "#,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+    
+    Ok(())
 }
 
 #[cfg(test)]
@@ -334,7 +344,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -352,7 +361,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -371,28 +379,30 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
+        
         edit_user_db(
             &pool,
             user_id,
             Some("newusername"),
-            None,
             Some("New Name"),
-            None,
-            None,
-            Some("test")
+            Some("31-01-1999"),
+            Some("Updated description"),
         )
         .await
         .unwrap();
+        
         let user = find_user_by_id(&pool, user_id)
             .await
             .unwrap()
             .unwrap();
+        
         assert_eq!(user.username, "newusername");
         assert_eq!(user.display_name, "New Name");
+        assert_eq!(user.birthday, Some("31-01-1999".to_string()));
+        assert_eq!(user.description_profile, Some("Updated description".to_string()));
     }
 
     #[tokio::test]
@@ -405,7 +415,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -432,7 +441,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
             .await
             .unwrap();
@@ -463,7 +471,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -491,7 +498,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -516,7 +522,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -536,7 +541,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -555,7 +559,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
             .await
             .unwrap();
@@ -597,7 +600,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -627,7 +629,6 @@ mod tests {
             "Test",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await
         .unwrap();
@@ -675,7 +676,6 @@ mod tests {
             "Token User",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await?;
         
@@ -714,7 +714,6 @@ mod tests {
             "Load All",
             &None,
             &None,
-            &Some("test".to_string())
         )
         .await?;
 
