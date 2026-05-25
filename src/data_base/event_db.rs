@@ -71,6 +71,7 @@ pub async fn get_user_events(
     user_id: i64,
     limit: i64,
     offset: i64,
+    status: String,  // 👈 обязательный
 ) -> Result<Vec<Events>, AppError> {
     let rows = sqlx::query!(
         r#"
@@ -78,7 +79,7 @@ pub async fn get_user_events(
             e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
-        WHERE eu.user_id = $1
+        WHERE eu.user_id = $1 AND e.status_event = $2
         ORDER BY 
             CASE e.status_event
                 WHEN 'active' THEN 1
@@ -86,9 +87,10 @@ pub async fn get_user_events(
                 ELSE 99
             END ASC,
             e.created_at DESC
-        LIMIT $2 OFFSET $3
+        LIMIT $3 OFFSET $4
         "#,
         user_id,
+        status,
         limit,
         offset
     )
@@ -104,7 +106,7 @@ pub async fn get_user_events(
         created_at: r.created_at,
         status_event: r.status_event,
         color: r.color,
-        location: r.location
+        location: r.location,
     }).collect())
 }
 
@@ -114,19 +116,21 @@ pub async fn get_user_event(
     user_id: i64,
     limit: i64,
     offset: i64,
+    status: String,
 ) -> Result<Events, AppError> {
     let row = sqlx::query!(
         r#"
         SELECT e.event_id, e.title, e.description_event, e.start_date_time, e.end_date_time, e.status_event, e.created_at, e.color, e.location
         FROM events e
         JOIN event_user eu ON e.event_id = eu.event_id
-        WHERE eu.user_id = $1
+        WHERE eu.user_id = $1 AND e.status_event = $4
         ORDER BY e.created_at DESC
         LIMIT $2 OFFSET $3
         "#,
         user_id,
         limit,
-        offset
+        offset,
+        status
     )
     .fetch_one(pool)
     .await?;
@@ -763,7 +767,7 @@ mod tests {
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10).await?;
-        let events = get_user_events(&pool, user_id, 10, 0).await?;
+        let events = get_user_events(&pool, user_id, 10, 0, "active".to_string()).await?;
         assert_eq!(events.len(), 1);
         Ok(())
     }
@@ -809,7 +813,7 @@ mod tests {
         .await?;
         add_member(&pool, user_id, event_id, 10 ).await?;
 
-        let event = get_user_event(&pool, user_id, 1, 0).await?;
+        let event = get_user_event(&pool, user_id, 1, 0, "active".to_string()).await?;
         assert_eq!(event.event_id, event_id);
         Ok(())
     }

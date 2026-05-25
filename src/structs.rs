@@ -115,7 +115,7 @@ pub struct Poll {
     pub created_by: i64,
     pub created_at: Option<DateTime<Utc>>,
     pub is_active: bool,
-    pub more_than_one_vote: bool
+    pub multiple_choice: bool
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

@@ -8,7 +8,7 @@ use axum::{
     extract::path::Path,
     Json,
     http::StatusCode,
-
+    http::HeaderMap,
 };
 use std::{
     sync::Arc,
@@ -127,7 +127,7 @@ pub async fn get_user_events_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
-    let events = get_user_events(&state.db_pool, user.user_id, query.limit, query.offset).await?;
+    let events = get_user_events(&state.db_pool, user.user_id, query.limit, query.offset, query.status.clone()).await?;
 
     Ok((StatusCode::OK, Json(json!({"events": events}))))
 }
@@ -322,7 +322,7 @@ pub async fn get_modules_handler(
             title: poll.question,
             data: PollModuleData {
                 options: poll_data.options,
-                multiple_choice: poll.more_than_one_vote,
+                multiple_choice: poll.multiple_choice,
                 votes: poll_data.votes,
                 votes_count: poll_data.votes_count,
                 own_vote: poll_data.own_vote,
@@ -353,7 +353,7 @@ pub async fn get_modules_handler(
     // 5. Получаем все списки задач
     let task_lists = get_event_task_lists(&state.db_pool, event_id).await?;
     for task_list in task_lists {
-        let tasks: Vec<TaskListItemData> = task_list.tasks
+        let tasks: Vec<TaskListItemData> = task_list.items
             .into_iter()
             .map(|task| TaskListItemData {
                 id: task.task_id.to_string(),
@@ -626,6 +626,244 @@ pub async fn update_event_status_handler(
     Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
+use tokio::fs;
+use std::path::PathBuf;
+use axum::http::header;
+use axum_extra::extract::Multipart;
+use blake3;
+
+const EVENT_UPLOAD_DIR: &str = "uploads/event_avatars";
+
+fn get_event_avatar_dir(event_id: i64) -> PathBuf {
+    PathBuf::from(EVENT_UPLOAD_DIR).join(format!("event_{}", event_id))
+}
+
+async fn compute_event_avatar_etag(event_id: i64) -> Result<String, AppError> {
+    let event_dir = get_event_avatar_dir(event_id);
+    
+    let mut avatar_path = None;
+    if let Ok(mut entries) = fs::read_dir(&event_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("avatar.") {
+                avatar_path = Some(entry.path());
+                break;
+            }
+        }
+    }
+    
+    let path = match avatar_path {
+        Some(p) => p,
+        None => return Ok("\"\"".to_string()),
+    };
+    
+    let data = fs::read(&path).await.map_err(|e| {
+        tracing::error!("Failed to read file: {}", e);
+        AppError::Internal("Failed to read file".to_string())
+    })?;
+    let hash = blake3::hash(&data);
+    Ok(format!("\"{}\"", hash.to_hex()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/events/{event_id}/avatar",
+    tag = "Event",
+    security(
+        ("bearerAuth" = [])
+    ),
+    params(
+        ("event_id" = i64, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Avatar uploaded successfully", body = SuccessResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Event not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn upload_event_avatar_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Path(event_id): Path<i64>,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, AppError> {
+    let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
+    
+    let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
+    if !is_in_event {
+        return Err(AppError::Forbidden("User not in event".to_string()));
+    }
+    
+    let has_permission = has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?;
+    if !has_permission {
+        return Err(AppError::Forbidden("Not enough permissions".to_string()));
+    }
+    
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name() != Some("avatar") {
+            continue;
+        }
+        
+        let file_name = match field.file_name() {
+            Some(name) => name.to_string(),
+            None => continue,
+        };
+        
+        let ext = std::path::Path::new(&file_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("jpg");
+        
+        let data = field.bytes().await.map_err(|e| {
+            tracing::error!("Failed to read file: {}", e);
+            AppError::BadRequest("Failed to read file".to_string())
+        })?;
+        
+        let event_dir = get_event_avatar_dir(event_id);
+        
+        fs::create_dir_all(&event_dir).await.map_err(|e| {
+            tracing::error!("Failed to create event dir: {}", e);
+            AppError::Internal("Failed to create directory".to_string())
+        })?;
+        
+        if let Ok(mut entries) = fs::read_dir(&event_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let name = entry.file_name();
+                if name.to_string_lossy().starts_with("avatar.") {
+                    let _ = fs::remove_file(entry.path()).await;
+                }
+            }
+        }
+        
+        let new_name = format!("avatar.{}", ext);
+        let save_path = event_dir.join(&new_name);
+        
+        fs::write(&save_path, data).await.map_err(|e| {
+            tracing::error!("Failed to save file: {}", e);
+            AppError::Internal("Failed to save file".to_string())
+        })?;
+        
+        return Ok((StatusCode::OK, Json(SuccessResponse { success: true })));
+    }
+    
+    Err(AppError::BadRequest("No file provided".to_string()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/events/{event_id}/avatar",
+    tag = "Event",
+    params(
+        ("event_id" = i64, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Get avatar successfully"),
+        (status = 304, description = "Not modified"),
+        (status = 404, description = "Avatar not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn get_event_avatar_handler(
+    headers: HeaderMap,
+    Path(event_id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let current_etag = compute_event_avatar_etag(event_id).await?;
+    
+    if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
+        if if_none_match.to_str().unwrap_or("") == current_etag {
+            return Ok(StatusCode::NOT_MODIFIED.into_response());
+        }
+    }
+    
+    let event_dir = get_event_avatar_dir(event_id);
+    
+    if !event_dir.exists() {
+        return Err(AppError::NotFound("Avatar not found".to_string()));
+    }
+    
+    let mut avatar_path = None;
+    if let Ok(mut entries) = fs::read_dir(&event_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("avatar.") {
+                avatar_path = Some(entry.path());
+                break;
+            }
+        }
+    }
+    
+    let path = avatar_path.ok_or_else(|| AppError::NotFound("Avatar not found".to_string()))?;
+    
+    let mime = mime_guess::from_path(&path).first_or_octet_stream();
+    let data = fs::read(&path).await.map_err(|e| {
+        tracing::error!("Failed to read file: {}", e);
+        AppError::Internal("Failed to read file".to_string())
+    })?;
+    
+    let mut response = (StatusCode::OK, data).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        mime.to_string().parse().unwrap(),
+    );
+    response.headers_mut().insert(
+        header::ETAG,
+        current_etag.parse().unwrap(),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        "public, max-age=3600".parse().unwrap(),
+    );
+    
+    Ok(response)
+}
+
+#[utoipa::path(
+    delete,
+    path = "/events/{event_id}/avatar",
+    tag = "Event",
+    security(
+        ("bearerAuth" = [])
+    ),
+    params(
+        ("event_id" = i64, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Avatar deleted successfully", body = SuccessResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Avatar not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn delete_event_avatar_handler(
+    State(state): State<Arc<AppState>>,
+    auth: TypedHeader<Authorization<Bearer>>,
+    Path(event_id): Path<i64>,
+) -> Result<impl IntoResponse, AppError> {
+    let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
+    
+    let has_permission = has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?;
+    if !has_permission {
+        return Err(AppError::Forbidden("Not enough permissions".to_string()));
+    }
+    
+    let event_dir = get_event_avatar_dir(event_id);
+    
+    if let Ok(mut entries) = fs::read_dir(&event_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("avatar.") {
+                let _ = fs::remove_file(entry.path()).await;
+            }
+        }
+    }
+    
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+}
+
 // Plainning module handlers
 
 
@@ -752,7 +990,7 @@ mod tests {
         user_store::UserStore,
         secrets::verification::VerificationStore,
     };
-    use axum::{Router, routing::get, body::Body, http::Request};
+    use axum::{Router, body::Body, http::Request};
     use tower::ServiceExt;
     use chrono::Utc;
     use tokio::sync::broadcast;
@@ -825,7 +1063,7 @@ mod tests {
         
         let response = app.oneshot(request).await.unwrap();
         let status = response.status();
-        let (parts, body) = response.into_parts();
+        let (_, body) = response.into_parts();
         let bytes = body.collect().await.unwrap().to_bytes();
         let body_str = String::from_utf8_lossy(&bytes);
         

@@ -75,8 +75,9 @@ pub async fn create_poll_handler(
         payload.multiple_choice
     ).await?;
 
+    let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
 
-    Ok((StatusCode::CREATED, Json(json!({"poll_id": poll_id }))))
+    Ok((StatusCode::CREATED, Json(json!({"poll": poll }))))
 }
 
 #[utoipa::path(

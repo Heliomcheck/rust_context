@@ -58,7 +58,7 @@ pub async fn create_task_list_handler(
         &state.db_pool,
         event_id,
         &payload.title,
-        &payload.tasks,
+        &payload.items,
         user_id,
     )
     .await?;

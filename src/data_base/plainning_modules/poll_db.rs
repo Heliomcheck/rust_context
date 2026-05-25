@@ -76,6 +76,39 @@ pub async fn create_poll(
     Ok(poll_id)
 }
 
+pub async fn get_poll_by_id(
+    pool: &PgPool,
+    poll_id: i64,
+) -> Result<Poll, AppError> {
+    let poll_info = sqlx::query!(
+        r#"
+        SELECT 
+            poll_id,
+            question,
+            created_by,
+            created_at,
+            is_active,
+            more_than_one_vote,
+            event_id
+        FROM poll
+        WHERE poll_id = $1 AND is_active = true
+        "#,
+        poll_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("Poll {} not found", poll_id)))?;
+
+    Ok(Poll {
+        poll_id: poll_info.poll_id,
+        question: poll_info.question,
+        created_by: poll_info.created_by,
+        created_at: poll_info.created_at,
+        is_active: poll_info.is_active,
+        multiple_choice: poll_info.more_than_one_vote,
+    })
+}
+
 #[allow(dead_code)]
 pub async fn get_count_of_options(
     pool: &PgPool,
@@ -101,7 +134,7 @@ pub async fn get_count_of_options(
             }
         },
         None => return Err(sqlx::Error::RowNotFound)
-}
+    }
 }
 
 pub async fn vote_on_poll(
@@ -236,7 +269,7 @@ pub async fn get_event_polls(
         created_by: info.created_by,
         created_at: info.created_at,
         is_active: info.is_active,
-        more_than_one_vote: info.more_than_one_vote
+        multiple_choice: info.more_than_one_vote
     }).collect();
 
     Ok(polls)

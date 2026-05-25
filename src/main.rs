@@ -102,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
         //.route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         
-        .route("/avatars/{file_name}", routing::get(get_avatar_handler))
+        .route("/avatars/:file_name", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
         .route("/events/:event_id", routing::get(get_detailed_event_handler))
@@ -110,12 +110,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/:event_id/status", routing::patch(update_event_status_handler))
         .route("/events/:event_id", routing::delete(delete_event_handler))
         
-        .route("/events", routing::get(get_user_events_handler)) // query required
-        //.route("/events/:event_id/avatar", routing::post(upload_event_avatar_handler)) // status = ""/limit = 10/offset = 10
+        .route("/events", routing::get(get_user_events_handler)) // query required // status = ""/limit = 10/offset = 10
         .route("/events/:event_id/join", routing::post(event_join_handler))
         .route("/events/:event_id/members/{user_id}", routing::post(delete_user_from_event_handler))
         .route("/events/:event_id/members/{user_id}", routing::put(update_user_permissions_handler))
 
+        .route("/events/:event_id/avatar", routing::post(upload_event_avatar_handler))
+        .route("/event-avatars/:event_id", routing::get(get_event_avatar_handler))
+        .route("/events/:event_id/avatar", routing::delete(delete_event_avatar_handler))
+        
         .route("/events/:event_id/planning", routing::get(get_modules_handler))
 
         .route("/events/:event_id/planning/poll", routing::post(create_poll_handler))

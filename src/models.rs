@@ -163,6 +163,7 @@ pub struct GetEventDetailedResponse {
 #[derive(Debug, Deserialize, Serialize, ToSchema, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct GetEvents {
+    pub status: String,
     pub limit: i64,
     pub offset: i64
 }
@@ -301,7 +302,7 @@ pub struct DeleteItemListRequest {
 pub struct CreateTaskListRequest {
     pub title: String,
     #[validate(length(min = 1, message = "Tasks cannot be empty"))]
-    pub tasks: Vec<String>,
+    pub items: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]

@@ -12,7 +12,7 @@ pub struct TaskListWithItems {
     pub title: String,
     pub created_by: i64,
     pub created_at: DateTime<Utc>,
-    pub tasks: Vec<TaskListItem>,
+    pub items: Vec<TaskListItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ pub async fn create_task_list(
         title: title.to_string(),
         created_by,
         created_at,
-        tasks: saved_tasks,
+        items: saved_tasks,
     })
 }
 
@@ -144,7 +144,7 @@ pub async fn get_task_list(
         title: row.title,
         created_by: row.created_by,
         created_at,
-        tasks,
+        items: tasks,
     }))
 }
 
@@ -372,7 +372,7 @@ pub async fn get_event_task_lists(
             title: row.title,
             created_by: 0,
             created_at: chrono::Utc::now(),
-            tasks,
+            items: tasks,
         });
     }
     
