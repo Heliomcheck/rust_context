@@ -105,39 +105,35 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
-        .route("/event/{event_id}", routing::get(get_detailed_event_handler))
-        .route("/events/{event_id}", routing::put(update_event_handler))
-        .route("/events/{event_id}/status", routing::patch(update_event_status_handler))
-        .route("/events/{event_id}", routing::delete(delete_event_handler))
+        .route("/events/:event_id", routing::get(get_detailed_event_handler))
+        .route("/events/:event_id", routing::put(update_event_handler))
+        .route("/events/:event_id/status", routing::patch(update_event_status_handler))
+        .route("/events/:event_id", routing::delete(delete_event_handler))
         
-        .route("/events/", routing::get(get_user_events_handler)) // query required
-        //.route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler)) // status = ""/limit = 10/offset = 10
-        .route("/events/{event_id}/join", routing::post(event_join_handler))
-        .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
-        .route("/events/{event_id}/members/{user_id}", routing::put(update_user_permissions_handler))
+        .route("/events", routing::get(get_user_events_handler)) // query required
+        //.route("/events/:event_id/avatar", routing::post(upload_event_avatar_handler)) // status = ""/limit = 10/offset = 10
+        .route("/events/:event_id/join", routing::post(event_join_handler))
+        .route("/events/:event_id/members/{user_id}", routing::post(delete_user_from_event_handler))
+        .route("/events/:event_id/members/{user_id}", routing::put(update_user_permissions_handler))
 
-        .route("/events/{eventId}/planning", routing::get(get_modules_handler))
+        .route("/events/:event_id/planning", routing::get(get_modules_handler))
 
-        .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
-        .route("/events/{event_id}/planning/poll/{poll_id}", routing::post(vote_poll_handler))
-        .route("/events/{event_id}/planning/poll/{poll_id}", routing::delete(delete_poll_handler))
-        .route("/events/{event_id}/planning/poll/{poll_id}", routing::put(update_poll_handler))
+        .route("/events/:event_id/planning/poll", routing::post(create_poll_handler))
+        .route("/events/:event_id/planning/poll/:poll_id", routing::post(vote_poll_handler))
+        .route("/events/:event_id/planning/poll/:poll_id", routing::delete(delete_poll_handler))
+        .route("/events/:event_id/planning/poll/:poll_id", routing::put(update_poll_handler))
 
-        .route("/events/{event_id}/planning/items", routing::post(create_item_list_handler))
-        .route("/events/{event_id}/planning/items/{module_id}", routing::patch(update_item_list_handler))
-        .route("/events/{event_id}/planning/items/{module_id}/items/{item_id}/assign", routing::post(assign_item_handler))
-        .route("/events/{event_id}/planning/items/{module_id}", routing::delete(delete_item_list_handler))
+        .route("/events/:event_id/planning/items", routing::post(create_item_list_handler))
+        .route("/events/:event_id/planning/items/:module_id", routing::patch(update_item_list_handler))
+        .route("/events/:event_id/planning/items/:module_id/items/:item_id/assign", routing::post(assign_item_handler))
+        .route("/events/:event_id/planning/items/:module_id", routing::delete(delete_item_list_handler))
 
-        .route("/events/{event_id}/planning/tasks", routing::post(create_task_list_handler))
-        .route("/events/{event_id}/planning/tasks/{module_id}", routing::patch(update_task_list_handler))
-        .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign", routing::post(assign_task_handler))
-        .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete", routing::post(complete_task_handler))
-        .route("/events/{event_id}/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
+        .route("/events/:event_id/planning/tasks", routing::post(create_task_list_handler))
+        .route("/events/:event_id/planning/tasks/:module_id", routing::patch(update_task_list_handler))
+        .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/assign", routing::post(assign_task_handler))
+        .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/complete", routing::post(complete_task_handler))
+        .route("/events/:event_id/planning/tasks/:module_id", routing::delete(delete_task_list_handler))
 
-        // .route("/events/create_item", routing::post(create_item_handler))
-        // .route("/events/update_item", routing::post(update_item_handler))
-        // .route("/events/create_task", routing::post(create_task_handler))
-        // .route("/events/update_task", routing::post(update_task_handler))
         .with_state(state);
     
     let listner = TcpListener::bind(args[1].as_str()).await

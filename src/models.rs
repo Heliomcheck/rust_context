@@ -240,9 +240,9 @@ pub struct ErrorResponse {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreatePollRequest {
-    pub question: String,
+    pub title: String,
     pub options: Vec<String>,
-    pub more_than_one_vote: bool
+    pub multiple_choice: bool
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -254,7 +254,7 @@ pub struct UpdatePollRequest {
 pub struct VotePollRequest {
     pub poll_id: i64,
     #[validate(length(min = 1, message = "At least one option"))]
-    pub option_indexes: Vec<i64>,
+    pub option_indexes: Vec<i32>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

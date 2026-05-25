@@ -31,6 +31,8 @@ blake3 = "1.8.5"
 thiserror = "2.0.18"
 utoipa = { version = "4", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "6", features = ["axum"] }
+hyper = "1.9.0"
+http-body-util = "0.1.3"
 
 
 # [profile.dev]

@@ -12,8 +12,11 @@ CREATE TABLE poll (
 CREATE TABLE poll_option (
     option_id BIGSERIAL PRIMARY KEY,
     poll_id BIGINT NOT NULL REFERENCES poll(poll_id) ON DELETE CASCADE,
-    option_text TEXT NOT NULL
+    option_text TEXT NOT NULL,
+    position INT NOT NULL DEFAULT 0
 );
+
+CREATE INDEX idx_poll_option_poll_position ON poll_option(poll_id, position);
 
 CREATE TABLE poll_votes (
     poll_id BIGINT NOT NULL REFERENCES poll(poll_id) ON DELETE CASCADE,

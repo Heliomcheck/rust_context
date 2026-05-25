@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_event_permissions_basic_operations() {
-        let mut permissions = EventPermissions::full();
+        let mut permissions: EventPermissions = EventPermissions::full();
         assert!(permissions.check_permission(EventPermissions::OWNER));
         assert!(!permissions.check_permission(EventPermissions::ADMIN));
         

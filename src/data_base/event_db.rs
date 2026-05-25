@@ -81,8 +81,8 @@ pub async fn get_user_events(
         WHERE eu.user_id = $1
         ORDER BY 
             CASE e.status_event
-                WHEN 'ACTIVE' THEN 1
-                WHEN 'ARCHIVED' THEN 2
+                WHEN 'active' THEN 1
+                WHEN 'archived' THEN 2
                 ELSE 99
             END ASC,
             e.created_at DESC

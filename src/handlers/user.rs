@@ -195,15 +195,17 @@ pub async fn upload_avatar_handler(
 
 #[utoipa::path(
     get,
-    path = "/avatars/{file_name}",
+    path = "/avatars/{user_id}",
     tag = "Avatar",
     security(
         ("bearerAuth" = [])
     ),
+    params(
+        ("user_id" = i64, Path, description = "User ID")
+    ),
     responses(
-        (status = 200, description = "Get avatar successfully", body = mime_guess::Mime),
-        (status = 304, description = "Not modified - avatar not changed", body = EmptyResponse),
-        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 200, description = "Get avatar successfully"),
+        (status = 304, description = "Not modified - avatar not changed"),
         (status = 401, description = "Unauthorized - invalid or expired token", body = ErrorResponse),
         (status = 404, description = "Avatar not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -213,11 +215,12 @@ pub async fn get_avatar_handler(
     headers: HeaderMap,
     Path(user_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
-    let current_etag = compute_avatar_etag(user_id).await.unwrap_or("\"\"".to_string()); // compute etag
+    let current_etag = compute_avatar_etag(user_id).await?;
 
-    if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) { // check 
+    // Проверяем стандартный заголовок If-None-Match
+    if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
         if if_none_match.to_str().unwrap_or("") == current_etag {
-            return Ok((StatusCode::NOT_MODIFIED).into_response());
+            return Ok(StatusCode::NOT_MODIFIED.into_response());
         }
     }
 
@@ -227,7 +230,7 @@ pub async fn get_avatar_handler(
         return Err(AppError::NotFound("Avatar not found".to_string()));
     }
     
-    let mut avatar_path = None; // find avatar.*
+    let mut avatar_path = None;
     if let Ok(mut entries) = fs::read_dir(&user_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let name = entry.file_name();
@@ -244,21 +247,30 @@ pub async fn get_avatar_handler(
     };
     
     let mime = mime_guess::from_path(&path).first_or_octet_stream();
+    let data = fs::read(&path).await.map_err(|e| {
+        error!("Failed to read file: {}", e);
+        AppError::Internal("Failed to read file".to_string())
+    })?;
     
-    match fs::read(&path).await {
-        Ok(data) => Ok((
-            StatusCode::OK,
-            [(axum::http::header::CONTENT_TYPE, mime.to_string())],
-            data,
-        ).into_response()),
-        Err(e) => {
-            error!("Failed to read file: {}", e);
-            Err(AppError::Internal("Failed to read file".to_string()))
-        }
-    }
+    // Создаём response с заголовками
+    let mut response = (StatusCode::OK, data).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        mime.to_string().parse().unwrap(),
+    );
+    response.headers_mut().insert(
+        header::ETAG,
+        current_etag.parse().unwrap(),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        "public, max-age=3600".parse().unwrap(),
+    );
+    
+    Ok(response)
 }
 
-pub async fn compute_avatar_etag(user_id: i64) -> Result<String, std::io::Error> {
+pub async fn compute_avatar_etag(user_id: i64) -> Result<String, AppError> {
     let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user_id));
     
     let mut avatar_path = None;
@@ -277,7 +289,11 @@ pub async fn compute_avatar_etag(user_id: i64) -> Result<String, std::io::Error>
         None => return Ok("\"\"".to_string()),
     };
     
-    let data = fs::read(&path).await?;
+    let data = fs::read(&path).await.map_err(|e| {
+        error!("Failed to read avatar file: {}", e);
+        AppError::Internal("Failed to read file".to_string())
+    })?;
+    
     let hash = blake3::hash(&data);
     Ok(format!("\"{}\"", hash.to_hex()))
 }

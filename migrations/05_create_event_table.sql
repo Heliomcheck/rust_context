@@ -8,7 +8,7 @@ CREATE TABLE events (
     color VARCHAR(7) NOT NULL DEFAULT '#123456' ,
     location VARCHAR(200),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    status_event VARCHAR(30) NOT NULL DEFAULT 'OPEN'
+    status_event VARCHAR(30) NOT NULL DEFAULT 'active'
 );
 
 CREATE INDEX idx_events_status_event ON events(status_event);

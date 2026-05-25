@@ -94,7 +94,7 @@ pub async fn create_event_handler(
         event_id: event.event_id.to_string(),
         title: event.title,
         description_event: event.description_event,
-        location: Some("test".to_string()),
+        location: event.location,
         start_date_time: event.start_date_time.map(|dt| dt.to_rfc3339()),
         end_date_time: event.end_date_time.map(|dt| dt.to_rfc3339()),
         color: event.color,
@@ -134,27 +134,31 @@ pub async fn get_user_events_handler(
 
 #[utoipa::path(
     get,
-    path = "/event/{event_id}",
+    path = "/events/{event_id}",
     tag = "Event",
     security(
         ("bearerAuth" = [])
     ),
-    request_body = GetEventRequest,
+    params(
+        ("event_id" = i64, Path, description = "Event ID")
+    ),
     responses(
         (status = 200, description = "Event details retrieved", body = GetEventDetailedResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "User not in event", body = ErrorResponse),
+        (status = 404, description = "Event not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
 pub async fn get_detailed_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(path): Path<EventPaths>
+    Path(event_id): Path<i64>
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
-    let event = get_event_by_id(&state.db_pool, path.event_id).await?;
+    let event = get_event_by_id(&state.db_pool, event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
@@ -206,12 +210,12 @@ pub async fn get_detailed_event_handler(
 pub async fn update_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(path): Path<EventPaths>,
+    Path(event_id): Path<i64>,
     Json(payload): Json<UpdateEventRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
-    let event = get_event_by_id(&state.db_pool, path.event_id).await?;
+    let event = get_event_by_id(&state.db_pool, event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
@@ -226,7 +230,7 @@ pub async fn update_event_handler(
 
     update_event(
         &state.db_pool, 
-        path.event_id, 
+        event_id, 
         payload.title, 
         payload.description_event, 
         payload.start_date_time.and_then(|s| s.parse::<DateTime<Utc>>().ok()), 
@@ -235,7 +239,7 @@ pub async fn update_event_handler(
         payload.location
     ).await?;
 
-    let event_new = get_event_by_id(&state.db_pool, path.event_id).await?;
+    let event_new = get_event_by_id(&state.db_pool, event_id).await?;
 
     Ok((StatusCode::OK, Json(json!({"event" : event_new}))))
 }
@@ -314,7 +318,7 @@ pub async fn get_modules_handler(
         let poll_data = get_poll_with_votes(&state.db_pool, poll.poll_id, user.user_id).await?;
         
         modules.push(PlanningModule::Poll {
-            id: format!("poll_{}", poll.poll_id),
+            id: poll.poll_id.to_string(),
             title: poll.question,
             data: PollModuleData {
                 options: poll_data.options,
@@ -332,7 +336,7 @@ pub async fn get_modules_handler(
         let items: Vec<ItemListItemData> = item_list.items
             .into_iter()
             .map(|item| ItemListItemData {
-                id: format!("item_{}", item.item_id),
+                id: item.item_id.to_string(),
                 text: item.item_text,
                 assigned_user_id: item.assigned_user_id.map(|id| id.to_string()),
                 assigned_user_name: item.assigned_user_name,
@@ -340,7 +344,7 @@ pub async fn get_modules_handler(
             .collect();
         
         modules.push(PlanningModule::ItemList {
-            id: format!("items_{}", item_list.item_list_id),
+            id: item_list.item_list_id.to_string(),
             title: item_list.title,
             data: ItemListModuleData { items },
         });
@@ -352,7 +356,7 @@ pub async fn get_modules_handler(
         let tasks: Vec<TaskListItemData> = task_list.tasks
             .into_iter()
             .map(|task| TaskListItemData {
-                id: format!("task_{}", task.task_id),
+                id: task.task_id.to_string(),
                 text: task.task_text,
                 assigned_user_id: task.assigned_user_id.map(|id| id.to_string()),
                 assigned_user_name: task.assigned_user_name,
@@ -361,7 +365,7 @@ pub async fn get_modules_handler(
             .collect();
         
         modules.push(PlanningModule::TaskList {
-            id: format!("tasks_{}", task_list.task_list_id),
+            id: task_list.task_list_id.to_string(),
             title: task_list.title,
             data: TaskListModuleData { items: tasks },
         });
@@ -659,7 +663,7 @@ pub async fn update_event_status_handler(
 //     Ok((StatusCode::CREATED, Json(json!({"status": "ok"}))))
 // }
 //test
-// #[cfg(test)]
+//#[cfg(test)]
 //         assert_eq!(response.status(), StatusCode::CREATED);
 //     }
 
@@ -718,23 +722,312 @@ pub async fn update_event_status_handler(
 //         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 //     }
 
-//     #[tokio::test]
-//     async fn test_get_user_events_handler() {
-//         let app = create_test_app().await;
+    // #[tokio::test]
+    // async fn test_get_user_events_handler() {
+    //     let app = create_test_app().await;
 
-//         let state = app.state::<Arc<AppState>>().unwrap();
+    //     let state = app.state::<Arc<AppState>>().unwrap();
 
-//         let token = create_test_user_and_token(&state.db_pool).await;
+    //     let token = create_test_user_and_token(&state.db_pool).await;
 
-//         let request = Request::builder()
-//             .method("GET")
-//             .uri("/events/user")
-//             .header("authorization", format!("Bearer {}", token))
-//             .body(Body::empty())
-//             .unwrap();
+    //     let request = Request::builder()
+    //         .method("GET")
+    //         .uri("/events/user")
+    //         .header("authorization", format!("Bearer {}", token))
+    //         .body(Body::empty())
+    //         .unwrap();
 
-//         let response = app.oneshot(request).await.unwrap();
+    //     let response = app.oneshot(request).await.unwrap();
 
-//         assert_eq!(response.status(), StatusCode::OK);
-//     }
-// }
+    //     assert_eq!(response.status(), StatusCode::OK);
+    // }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        test_utils::setup_test_db,
+        data_base::user_db::{create_user_db, create_token},
+        data_base::event_db::{create_event, add_member},
+        permissions::EventPermissions,
+        user_store::UserStore,
+        secrets::verification::VerificationStore,
+    };
+    use axum::{Router, routing::get, body::Body, http::Request};
+    use tower::ServiceExt;
+    use chrono::Utc;
+    use tokio::sync::broadcast;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use http_body_util::BodyExt;
+
+    /// Создаёт тестовое приложение с зарегистрированными роутами
+    async fn test_app() -> (Router, Arc<AppState>, i64, String) {
+        let pool = setup_test_db().await;
+        
+        // Создаём пользователя
+        let user_id = create_user_db(
+            &pool,
+            "testuser",
+            "test@example.com",
+            "Test User",
+            &None,
+            &None,
+        ).await.unwrap();
+        
+        let token = "test_valid_token";
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        
+        // Создаём событие
+        let event_id = create_event(
+            &pool,
+            "Test Event",
+            Some("Test Description".to_string()),
+            None,
+            None,
+            "#123456".to_string(),
+        ).await.unwrap();
+        
+        // Добавляем пользователя в событие
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
+        
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        
+        {
+            let mut store = state.user_store.lock().await;
+            store.load_from_db(&state.db_pool).await.unwrap();
+        }
+        
+        let app = Router::new()
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .with_state(state.clone());
+        
+        (app, state, event_id, token.to_string())
+    }
+
+    /// Тест 1: Успешное получение события
+    #[tokio::test]
+    async fn test_get_detailed_event_success() {
+        let (app, _state, event_id, token) = test_app().await;
+        
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/events/{}", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        let (parts, body) = response.into_parts();
+        let bytes = body.collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8_lossy(&bytes);
+        
+        println!("Status: {}", status);
+        println!("Body: {}", body_str);
+        
+        assert_eq!(status, StatusCode::OK, "Expected 200 OK, got {}", status);
+        
+        let json: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert!(json.get("event").is_some(), "Missing 'event' field");
+        assert!(json.get("members").is_some(), "Missing 'members' field");
+        assert!(json.get("permissions").is_some(), "Missing 'permissions' field");
+    }
+
+    /// Тест 2: Пользователь не в событии -> 403
+    #[tokio::test]
+    async fn test_get_detailed_event_user_not_in_event() {
+        let pool = setup_test_db().await;
+        
+        let user_id = create_user_db(
+            &pool,
+            "testuser2",
+            "test2@example.com",
+            "Test User 2",
+            &None,
+            &None,
+        ).await.unwrap();
+        
+        let token = "test_token_2";
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        
+        let event_id = create_event(
+            &pool,
+            "Test Event 2",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        ).await.unwrap();
+        
+        // НЕ добавляем пользователя в событие
+        
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        
+        {
+            let mut store = state.user_store.lock().await;
+            store.load_from_db(&state.db_pool).await.unwrap();
+        }
+        
+        let app = Router::new()
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .with_state(state);
+        
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/events/{}", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        
+        println!("Status: {}", status);
+        
+        assert_eq!(status, StatusCode::FORBIDDEN, "Expected 403 Forbidden, got {}", status);
+    }
+
+    /// Тест 3: Событие не существует -> 404
+    #[tokio::test]
+    async fn test_get_detailed_event_not_found() {
+        let pool = setup_test_db().await;
+        
+        let user_id = create_user_db(
+            &pool,
+            "testuser3",
+            "test3@example.com",
+            "Test User 3",
+            &None,
+            &None,
+        ).await.unwrap();
+        
+        let token = "test_token_3";
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        
+        {
+            let mut store = state.user_store.lock().await;
+            store.load_from_db(&state.db_pool).await.unwrap();
+        }
+        
+        let app = Router::new()
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .with_state(state);
+        
+        let request = Request::builder()
+            .method("GET")
+            .uri("/events/99999")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        
+        println!("Status: {}", status);
+        
+        assert_eq!(status, StatusCode::NOT_FOUND, "Expected 404 Not Found, got {}", status);
+    }
+
+    /// Тест 4: Невалидный токен -> 401
+    #[tokio::test]
+    async fn test_get_detailed_event_invalid_token() {
+        let pool = setup_test_db().await;
+        
+        // Создаём событие, которое существует
+        let event_id = create_event(
+            &pool,
+            "Test Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        ).await.unwrap();
+        
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        
+        let app = Router::new()
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .with_state(state);
+        
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/events/{}", event_id))
+            .header("Authorization", "Bearer invalid_token_xyz")
+            .body(Body::empty())
+            .unwrap();
+        
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        
+        println!("Status: {}", status);
+        
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "Expected 401 Unauthorized, got {}", status);
+    }
+
+    /// Тест 5: Нет заголовка Authorization -> 401
+    #[tokio::test]
+    async fn test_get_detailed_event_no_auth_header() {
+        let pool = setup_test_db().await;
+        
+        let event_id = create_event(
+            &pool,
+            "Test Event",
+            None,
+            None,
+            None,
+            "#123456".to_string(),
+        ).await.unwrap();
+        
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        
+        let app = Router::new()
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .with_state(state);
+        
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/events/{}", event_id))
+            .body(Body::empty())
+            .unwrap();
+        
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        
+        println!("Status: {}", status);
+        
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "Expected 401 Unauthorized, got {}", status);
+    }
+}

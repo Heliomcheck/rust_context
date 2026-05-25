@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 use std::str;
+#[allow(unused_imports)]
 use std::collections::HashMap;
 use crate::models::PollVote;
 
@@ -33,6 +34,10 @@ pub async fn create_poll(
         return Err(AppError::BadRequest("Poll must have at least 2 options".to_string()));
     }
 
+    if options.len() > 20 {
+        return Err(AppError::BadRequest("Too many options (max 20)".to_string()));
+    }
+
     let mut tx = pool.begin().await?;
 
     let create_poll = sqlx::query!(
@@ -51,22 +56,27 @@ pub async fn create_poll(
 
     let poll_id = create_poll.poll_id;
 
-    sqlx::query!(
-        r#"
-        INSERT INTO poll_option (poll_id, option_text)
-        SELECT $1, unnest($2::text[])
-        "#,
-        poll_id,
-        &options
-    )
-    .execute(&mut *tx)
-    .await?;
+    // Сохраняем опции с position
+    for (position, option_text) in options.iter().enumerate() {
+        sqlx::query!(
+            r#"
+            INSERT INTO poll_option (poll_id, option_text, position)
+            VALUES ($1, $2, $3)
+            "#,
+            poll_id,
+            option_text,
+            position as i32
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
 
     tx.commit().await?;
 
     Ok(poll_id)
 }
 
+#[allow(dead_code)]
 pub async fn get_count_of_options(
     pool: &PgPool,
     poll_id: i64
@@ -98,8 +108,39 @@ pub async fn vote_on_poll(
     pool: &PgPool,
     poll_id: i64,
     user_id: i64,
-    option_ids: Vec<i64>,
-) -> Result<bool, sqlx::Error> {
+    option_indexes: Vec<i32>,
+) -> Result<bool, AppError> {
+    // Получаем маппинг position → option_id
+    let options = sqlx::query!(
+        r#"
+        SELECT option_id, position
+        FROM poll_option
+        WHERE poll_id = $1
+        "#,
+        poll_id
+    )
+    .fetch_all(pool)
+    .await?;
+    
+    let position_to_option_id: std::collections::HashMap<i32, i64> = options
+        .iter()
+        .map(|row| (row.position, row.option_id))
+        .collect();
+    
+    // Конвертируем индексы в option_id
+    let mut option_ids = Vec::new();
+    for idx in option_indexes {
+        if let Some(option_id) = position_to_option_id.get(&idx) {
+            option_ids.push(*option_id);
+        } else {
+            return Err(AppError::BadRequest(format!("Option index {} not found", idx)));
+        }
+    }
+    
+    // Транзакция
+    let mut tx = pool.begin().await?;
+    
+    // Удаляем старые голоса
     sqlx::query!(
         r#"
         DELETE FROM poll_votes
@@ -108,9 +149,10 @@ pub async fn vote_on_poll(
         poll_id,
         user_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-
+    
+    // Добавляем новые голоса
     for option_id in option_ids {
         sqlx::query!(
             r#"
@@ -121,10 +163,12 @@ pub async fn vote_on_poll(
             user_id,
             option_id
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     }
-
+    
+    tx.commit().await?;
+    
     Ok(true)
 }
 
@@ -203,13 +247,13 @@ pub async fn get_poll_with_votes(
     poll_id: i64,
     current_user_id: i64,
 ) -> Result<PollWithVotes, AppError> {
-    // Получаем опции опроса
+    // Получаем опции, сортируем по position
     let options_rows = sqlx::query!(
         r#"
-        SELECT option_id, option_text
+        SELECT option_id, option_text, position
         FROM poll_option
         WHERE poll_id = $1
-        ORDER BY option_id
+        ORDER BY position ASC
         "#,
         poll_id
     )
@@ -221,19 +265,18 @@ pub async fn get_poll_with_votes(
         .map(|row| row.option_text.clone())
         .collect();
     
-    // Создаём маппинг option_id -> индекс
-    let option_index_map: HashMap<i64, i32> = options_rows
+    // Маппинг position -> не нужен, position и есть индекс
+    // А вот option_id -> position понадобится для голосов
+    let option_id_to_position: std::collections::HashMap<i64, i32> = options_rows
         .iter()
-        .enumerate()
-        .map(|(idx, row)| (row.option_id, idx as i32))
+        .map(|row| (row.option_id, row.position))
         .collect();
     
     // Получаем все голоса
     let votes_rows = sqlx::query!(
         r#"
-        SELECT pv.user_id, pv.option_id, u.display_name, u.username
+        SELECT pv.user_id, pv.option_id
         FROM poll_votes pv
-        JOIN users u ON pv.user_id = u.user_id
         WHERE pv.poll_id = $1
         "#,
         poll_id
@@ -246,16 +289,17 @@ pub async fn get_poll_with_votes(
     let mut own_vote = Vec::new();
     
     for row in votes_rows {
-        if let Some(option_index) = option_index_map.get(&row.option_id) {
-            votes_count[*option_index as usize] += 1;
+        if let Some(position) = option_id_to_position.get(&row.option_id) {
+            let pos = *position as usize;
+            votes_count[pos] += 1;
             
             votes.push(PollVote {
-                option_index: *option_index,
+                option_index: *position,
                 user_id: row.user_id.to_string(),
             });
             
             if row.user_id == current_user_id {
-                own_vote.push(*option_index);
+                own_vote.push(*position);
             }
         }
     }
@@ -373,7 +417,6 @@ mod tests{
     async fn test_vote_on_poll() {
         let pool = setup_test_db().await;
         
-        // ✅ Создаем пользователя для голосования
         let voter_id = create_user_db(
             &pool,
             "voter",
@@ -385,7 +428,6 @@ mod tests{
         .await
         .unwrap();
         
-        // ✅ Создаем создателя опроса
         let creator_id = create_user_db(
             &pool,
             "creator",
@@ -397,7 +439,6 @@ mod tests{
         .await
         .unwrap();
         
-        // ✅ Создаем событие
         let event_id = create_event(
             &pool,
             "Test Event",
@@ -423,12 +464,13 @@ mod tests{
         .await
         .unwrap();
 
-        let option_id = sqlx::query!(
+        // Получаем позиции (индексы), а не option_id
+        let options = sqlx::query!(
             r#"
-            SELECT option_id
+            SELECT position
             FROM poll_option
             WHERE poll_id = $1
-            ORDER BY option_id
+            ORDER BY position ASC
             "#,
             poll_id
         )
@@ -436,34 +478,25 @@ mod tests{
         .await
         .unwrap();
 
-        let option_ids: Vec<i64> = option_id.into_iter().map(|o| o.option_id).collect();
+        // Теперь передаём индексы (position), а не option_id
+        let option_indexes: Vec<i32> = options.into_iter().map(|o| o.position).collect();
 
         let result = vote_on_poll(
             &pool,
             poll_id,
-            voter_id,  // ← используем реальный voter_id
-            vec![option_ids[0]],
+            voter_id,
+            vec![option_indexes[0]],  // 👈 теперь i32
         )
         .await
         .unwrap();
 
         assert!(result);
 
-        let votes = sqlx::query!(
-            r#"
-            SELECT option_id
-            FROM poll_votes
-            WHERE poll_id = $1 AND user_id = $2
-            "#,
-            poll_id,
-            voter_id
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-
-        assert_eq!(votes.len(), 1);
-        assert_eq!(votes[0].option_id, option_ids[0]);
+        // Проверяем, что голос сохранился (нужно проверить через get_poll_with_votes)
+        let poll_with_votes = get_poll_with_votes(&pool, poll_id, voter_id).await.unwrap();
+        
+        assert_eq!(poll_with_votes.votes_count[0], 1);
+        assert_eq!(poll_with_votes.own_vote, vec![0]);
     }
 
     #[tokio::test]

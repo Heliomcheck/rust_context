@@ -57,7 +57,7 @@ pub async fn register_handler(
         Ok(None) => {}
         Err(e) => {
             tracing::error!("DB error: {}", e);
-            return Err(AppError::Internal("Database error".to_string()));
+            return Err(AppError::Internal("Database error find user by email".to_string()));
         }
     }
     
@@ -68,7 +68,7 @@ pub async fn register_handler(
         Ok(None) => {}
         Err(e) => {
             tracing::error!("DB error: {}", e);
-            return Err(AppError::Internal("Database error".to_string()));
+            return Err(AppError::Internal("Database error find user by username".to_string()));
         }
     }
     
@@ -89,7 +89,7 @@ pub async fn register_handler(
             if error_msg.contains("duplicate key") && error_msg.contains("email") {
                 return Err(AppError::Conflict);
             }
-            return Err(AppError::Internal("Database error".to_string()));
+            return Err(AppError::Internal("Database error for create user".to_string()));
         }
     };
     
@@ -173,11 +173,11 @@ pub async fn verify_code_handler(
     let user = match find_user_by_email(&state.db_pool, &payload.email).await {
         Ok(Some(u)) => u,
         Ok(None) => {
-            return Err(AppError::BadRequest("User not found".to_string()));
+            return Ok((StatusCode::OK, Json(json!({ "is_new_user": true }))));
         }
         Err(_) => {
             tracing::error!("DB error (verify_code_handler)");
-            return Err(AppError::Internal("Database error".to_string()));
+            return Err(AppError::Internal("Database error find user by email".to_string()));
         }
     };
 
@@ -195,7 +195,7 @@ pub async fn verify_code_handler(
         }
         Err(e) => {
             tracing::error!("Failed to find token: {}", e);
-            return Err(AppError::Internal("Database error".to_string()));
+            return Err(AppError::Internal("Database error find user by token".to_string()));
         }
     };
 
