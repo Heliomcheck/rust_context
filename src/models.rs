@@ -112,8 +112,9 @@ pub struct UserDataResponse {
     pub user_id: i64,
     pub username: String,
     pub email: String,
-    pub name: String,
-    pub birthday: Option<String>
+    pub display_name: Option<String>,
+    pub birthday: Option<String>,
+    pub description: Option<String>
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -253,7 +254,6 @@ pub struct UpdatePollRequest {
 
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
 pub struct VotePollRequest {
-    pub poll_id: i64,
     #[validate(length(min = 1, message = "At least one option"))]
     pub option_indexes: Vec<i32>,
 }

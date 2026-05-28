@@ -8,6 +8,7 @@ use crate::{
 };
 use std::result::Result;
 use std::string::String;
+use chrono::{Duration};
 
 pub async fn create_event(
     pool: &PgPool,
@@ -15,21 +16,23 @@ pub async fn create_event(
     description_event: Option<String>,
     start_date_time: Option<DateTime<Utc>>,
     end_date_time: Option<DateTime<Utc>>,
+    location: Option<String>,
     color: String
 ) -> Result<i64, AppError> {
     let row = sqlx::query!(
         r#"
         INSERT INTO events (
-            title, description_event, start_date_time, end_date_time, color
+            title, description_event, start_date_time, end_date_time, color, location
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING event_id
         "#,
         title,
         description_event,
         start_date_time,
         end_date_time,
-        color
+        color,
+        location
     )
     .fetch_one(pool)
     .await?;
@@ -174,7 +177,7 @@ pub async fn get_users_in_event(
         .map(|row| EventParticipant {
             user_id: row.user_id,
             display_name: row.name.unwrap_or_else(|| "Unknown".to_string()),
-            permissions: row.permissions.to_string(),
+            permissions: format!("{:b}", row.permissions),
         })
         .collect())
 }
@@ -398,29 +401,29 @@ pub async fn has_permission(
     Ok(row)
 }
 
-#[allow(dead_code)]
-pub async fn create_event_token(
-    pool: &PgPool,
-    event_id: i64,
-    expires_in_hours: i64,
-) -> Result<String, AppError> {
-    let event_token = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
-    let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
+// #[allow(dead_code)]
+// pub async fn create_event_token(
+//     pool: &PgPool,
+//     event_id: i64,
+//     expires_in_hours: i64,
+// ) -> Result<String, AppError> {
+//     let event_token = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
+//     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
     
-    sqlx::query!(
-        r#"
-        INSERT INTO event_token (event_token, event_id, expires_at)
-        VALUES ($1, $2, $3)
-        "#,
-        event_token,
-        event_id,
-        expires_at
-    )
-    .execute(pool)
-    .await?;
+//     sqlx::query!(
+//         r#"
+//         INSERT INTO event_token (event_token, event_id, expires_at)
+//         VALUES ($1, $2, $3)
+//         "#,
+//         event_token,
+//         event_id,
+//         expires_at
+//     )
+//     .execute(pool)
+//     .await?;
     
-    Ok(event_token)
-}
+//     Ok(event_token)
+// }
 
 #[allow(dead_code)]
 pub async fn get_event_id_by_token(
@@ -569,6 +572,65 @@ pub async fn delete_event(
     
     Ok(())
 }
+
+pub async fn create_event_token(
+    pool: &PgPool,
+    event_id: i64,
+    expires_in_hours: i64,
+) -> Result<String, AppError> {
+    let token = crate::secrets::generator::Generator::new_session_token(); // 32 символа
+    let expires_at = Utc::now() + Duration::hours(expires_in_hours);
+    
+    sqlx::query!(
+        r#"
+        INSERT INTO event_token (event_token, event_id, expires_at)
+        VALUES ($1, $2, $3)
+        "#,
+        token,
+        event_id,
+        expires_at
+    )
+    .execute(pool)
+    .await?;
+    
+    Ok(token)
+}
+
+pub async fn is_event_token_valid(
+    pool: &PgPool,
+    token: &str,
+) -> Result<bool, AppError> {
+    let row = sqlx::query!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM event_token
+            WHERE event_token = $1 AND expires_at > NOW()
+        ) as "exists!"
+        "#,
+        token
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    Ok(row.exists)
+}
+
+pub async fn delete_event_token(
+    pool: &PgPool,
+    token: &str,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"
+        DELETE FROM event_token
+        WHERE event_token = $1
+        "#,
+        token
+    )
+    .execute(pool)
+    .await?;
+    
+    Ok(())
+}
 //test
 #[cfg(test)]
 mod tests {
@@ -586,6 +648,7 @@ mod tests {
             Some("Description".to_string()),
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         ).await?;
         let event = get_event_by_id(&pool, event_id).await?;
@@ -611,6 +674,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         update_event(
@@ -664,6 +728,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10,).await?;
@@ -688,6 +753,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 1,).await?;
@@ -713,6 +779,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10,).await?;
@@ -738,6 +805,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10,).await?; 
@@ -764,6 +832,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10).await?;
@@ -782,6 +851,7 @@ mod tests {
             None, 
             None, 
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
         let event_token = create_event_token(&pool, event_id, 1).await?;
@@ -808,6 +878,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;
@@ -836,6 +907,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;
@@ -865,6 +937,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;
@@ -893,6 +966,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;
@@ -924,6 +998,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;
@@ -946,6 +1021,7 @@ mod tests {
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string()
         )
         .await?;

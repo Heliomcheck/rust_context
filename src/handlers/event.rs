@@ -81,10 +81,16 @@ pub async fn create_event_handler(
         payload.description_event,
         start_date_time,
         end_date_time,
-        payload.color, 
+        payload.location,
+        payload.color
     ).await?;
 
-    let _ = add_member(&state.db_pool, user.user_id, event_id, EventPermissions::OWNER).await?;
+    let permissions = EventPermissions::new()
+        .add_permission(EventPermissions::OWNER)
+        .add_permission(EventPermissions::ADMIN)
+        .get_bits(); 
+    
+    let _ = add_member(&state.db_pool, user.user_id, event_id, permissions).await?;
 
     let event = get_event_by_id(&state.db_pool, event_id).await?;
     
@@ -171,12 +177,13 @@ pub async fn get_detailed_event_handler(
 
     let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {
-            let invite_link = "http://krug.com/token_invite".to_string();// create_event_token(&state.db_pool, event.event_id).await?;
+            let invite_token = create_event_token(&state.db_pool, event_id, 144).await?;
+            let invite_link = format!("https://kruug.netlify.app/invite?token={}", invite_token);
             return Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
                     event: event, 
                     invite_link: Some(invite_link), 
                     members: members,
-                    permissions: permissions.get_bits().to_string()
+                    permissions: format!("{:b}", permissions.get_bits())
             }))));
         },
         Ok(false) => {
@@ -184,7 +191,7 @@ pub async fn get_detailed_event_handler(
                     event: event, 
                     invite_link: None, 
                     members: members,
-                    permissions: permissions.get_bits().to_string()
+                    permissions: format!("{:b}", permissions.get_bits())
             }))));
         },
         Err(_) => return Err(AppError::Internal("Error check user permissions".to_string())),
@@ -566,22 +573,27 @@ pub async fn event_join_handler(
     auth: TypedHeader<Authorization<Bearer>>,
     Json(payload): Json<JoinEventRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
+    let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
+    
+    let token_event_id = match get_event_id_by_token(&state.db_pool, &payload.invite_token).await? {
+        Some(id) => id,
+        None => return Err(AppError::BadRequest("Invalid or expired invite token".to_string())),
+    };
+    
+    if token_event_id != payload.event_id {
+        return Err(AppError::BadRequest("Token does not match this event".to_string()));
+    }
     
     let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
+    
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
-        return Err(AppError::UserNotInEvent("User not in event".to_string()));
+    if is_member {
+        return Err(AppError::BadRequest("User already in event".to_string()));
     }
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
-        Ok(true) => true,
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
-        Err(e) => return Err(e),
-    };
-
-
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    
+    add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
+    
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
@@ -1024,6 +1036,7 @@ mod tests {
             Some("Test Description".to_string()),
             None,
             None,
+            Some("jfkdfj".to_string()),
             "#123456".to_string(),
         ).await.unwrap();
         
@@ -1103,6 +1116,7 @@ mod tests {
             None,
             None,
             None,
+            Some("jfkdfj".to_string()),
             "#123456".to_string(),
         ).await.unwrap();
         
@@ -1201,6 +1215,7 @@ mod tests {
             None,
             None,
             None,
+            Some("jfkdfj".to_string()),
             "#123456".to_string(),
         ).await.unwrap();
         
@@ -1241,6 +1256,7 @@ mod tests {
             None,
             None,
             None,
+            Some("jfkdfj".to_string()),
             "#123456".to_string(),
         ).await.unwrap();
         

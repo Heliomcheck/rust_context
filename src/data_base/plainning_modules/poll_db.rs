@@ -379,6 +379,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await
@@ -424,6 +425,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await
@@ -478,6 +480,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await
@@ -554,6 +557,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await
@@ -612,6 +616,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await
@@ -673,6 +678,7 @@ mod tests{
             None,
             None,
             None,
+            Some("uiu".to_string()),
             "#123456".to_string(),
         )
         .await

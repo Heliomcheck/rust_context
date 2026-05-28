@@ -97,8 +97,9 @@ pub async fn get_user_data_handler(
         user_id: user.user_id,
         username: user.username.clone(),
         email: user.email.clone(),
-        name: user.display_name.clone(),
-        birthday: user.birthday.clone()
+        display_name: Some(user.display_name.clone()),
+        birthday: user.birthday.clone(),
+        description: user.description_profile
     };
     
     Ok((StatusCode::OK, Json(json!({"user": response}))))

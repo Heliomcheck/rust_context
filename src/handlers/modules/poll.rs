@@ -77,7 +77,7 @@ pub async fn create_poll_handler(
 
     let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
 
-    Ok((StatusCode::CREATED, Json(json!({"poll": poll }))))
+    Ok((StatusCode::CREATED, Json(json!({"success": true }))))
 }
 
 #[utoipa::path(
