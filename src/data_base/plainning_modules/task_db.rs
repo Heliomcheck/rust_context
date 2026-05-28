@@ -378,3 +378,82 @@ pub async fn get_event_task_lists(
     
     Ok(result)
 }
+
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::setup_test_db;
+    use crate::data_base::user_db::create_user_db;
+    use crate::data_base::event_db::{create_event, add_member};
+    use crate::permissions::EventPermissions;
+
+    #[tokio::test]
+    async fn test_create_and_get_task_list() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "taskdbtest", "taskdb@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_task_list(&pool, event_id, "Tasks", &["task1".to_string(), "task2".to_string()], user_id).await?;
+        assert_eq!(list.items.len(), 2);
+
+        let fetched = get_task_list(&pool, list.task_list_id).await?.expect("should exist");
+        assert_eq!(fetched.title, "Tasks");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_assign_and_complete_task() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "assigncomp", "assigncomp@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_task_list(&pool, event_id, "Tasks", &["task1".to_string()], user_id).await?;
+        let task_id = list.items[0].task_id;
+
+        assign_task(&pool, task_id, user_id, true).await?;
+        let list = get_task_list(&pool, list.task_list_id).await?.unwrap();
+        assert_eq!(list.items[0].assigned_user_id, Some(user_id));
+
+        complete_task(&pool, task_id, user_id, true).await?;
+        let list = get_task_list(&pool, list.task_list_id).await?.unwrap();
+        assert!(list.items[0].is_completed);
+
+        // unassign
+        assign_task(&pool, task_id, user_id, false).await?;
+        let list = get_task_list(&pool, list.task_list_id).await?.unwrap();
+        assert_eq!(list.items[0].assigned_user_id, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_complete_task_not_assigned() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "compnotass", "compna@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_task_list(&pool, event_id, "Tasks", &["task1".to_string()], user_id).await?;
+        let task_id = list.items[0].task_id;
+
+        let result = complete_task(&pool, task_id, user_id, true).await;
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_task_list() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "deltask", "deltask@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_task_list(&pool, event_id, "Tasks", &["task1".to_string()], user_id).await?;
+        delete_task_list(&pool, list.task_list_id, event_id).await?;
+        let result = get_task_list(&pool, list.task_list_id).await?;
+        assert!(result.is_none());
+        Ok(())
+    }
+}

@@ -335,24 +335,16 @@ pub async fn get_user_for_handler_from_id(pool: &PgPool, user_id: i64) -> Result
     Ok(user)
 }
 
+//test
+
 #[cfg(test)]
 mod tests {
-    use tokio::sync::{
-        broadcast,
-        Mutex
-    }; 
-    use axum::{
-        Router, 
-        routing,
-        body::Body,
-        http::Request,
-        http::StatusCode
-    };
+    use tokio::sync::{broadcast, Mutex};
+    use axum::{Router, routing, body::Body, http::Request, http::StatusCode};
     use std::sync::Arc;
     use serde_json::json;
     use tower::ServiceExt;
     use chrono::Utc;
-
     use crate::{
         user_store::*,
         secrets::verification::VerificationStore,
@@ -362,87 +354,143 @@ mod tests {
         *
     };
 
-    #[tokio::test]// Проверяет, что запрос без валидного токена возвращает UNAUTHORIZED
-    async fn test_get_user_data_handler_unauthorized() {
-        let pool = setup_test_db().await;
-        let state = Arc::new(AppState {
-            tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
-            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
-        });
-        let app = Router::new()
-            .route("/user/get-data", routing::get(get_user_data_handler))
-            .with_state(state);
-        let request = Request::builder()
-            .method("GET")
-            .uri("/user/get-data")
-            .header("Authorization", "Bearer invalid")
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-    #[tokio::test]// Проверяет, что редактирование пользователя без валидного токена запрещено
-    async fn test_user_edit_handler_unauthorized() {
-        let pool = setup_test_db().await;
-        let state = Arc::new(AppState {
-            tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
-            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
-        });
-        let app = Router::new()
-            .route("/user/edit", routing::post(update_user_data_handler))
-            .with_state(state);
-        let payload = json!({
-            "username": "newname"
-        });
-        let request = Request::builder()
-            .method("POST")
-            .uri("/user/edit")
-            .header("Authorization", "Bearer invalid")
-            .header("content-type", "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // ----------------- helpers -----------------
+    async fn new_user_and_token(pool: &sqlx::PgPool) -> (i64, String) {
+        let uid = create_user_db(pool, "testuser", "test@test.com", "Test", &None, &None).await.unwrap();
+        let token = "usertoken";
+        create_token(pool, uid, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        (uid, token.to_string())
     }
 
-    #[tokio::test]// Проверяет успешное получение данных пользователя по токену
-    async fn test_get_user_data_success() {
-        let pool = setup_test_db().await;
-        let user_id = create_user_db(
-            &pool,
-            "user1",
-            "user1@mail.com",
-            "User",
-            &None,
-            &None,
-        ).await.unwrap();
-        let token = "valid_token";
-        create_token(
-            &pool,
-            user_id,
-            token,
-            Utc::now() + chrono::Duration::hours(1),
-        ).await.unwrap();
-        let state = Arc::new(AppState {
+    async fn create_state(pool: sqlx::PgPool) -> Arc<AppState> {
+        Arc::new(AppState {
             tx: broadcast::channel(10).0,
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
-        });
-        let app = Router::new()
-            .route("/user/get-data", routing::get(get_user_data_handler))
-            .with_state(state);
-        let request = Request::builder()
+        })
+    }
+
+    fn user_app(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/user/edit", routing::post(update_user_data_handler))
+            .route("/user/get_data", routing::get(get_user_data_handler))
+            .route("/user/avatar", routing::post(upload_avatar_handler))
+            .route("/avatars/:user_id", routing::get(get_avatar_handler))
+            .with_state(state)
+    }
+
+    // ----------------- get_user_data -----------------
+    #[tokio::test]
+    async fn get_user_data_success() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (_uid, token) = new_user_and_token(&pool).await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+
+        let req = Request::builder()
             .method("GET")
-            .uri("/user/get-data")
+            .uri("/user/get_data")
             .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+            .body(Body::empty())?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_user_data_unauthorized() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+        let req = Request::builder()
+            .method("GET")
+            .uri("/user/get_data")
+            .header("Authorization", "Bearer invalid")
+            .body(Body::empty())?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        Ok(())
+    }
+
+    // ----------------- update_user_data -----------------
+    #[tokio::test]
+    async fn update_user_data_success() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (uid, token) = new_user_and_token(&pool).await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+
+        let payload = json!({"username": "new_name", "display_name": "New Display"});
+        let req = Request::builder()
+            .method("POST")
+            .uri("/user/edit")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let updated = find_user_by_id(&state.db_pool, uid).await?.unwrap();
+        assert_eq!(updated.username, "new_name");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_user_data_unauthorized() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+        let payload = json!({"username": "newname"});
+        let req = Request::builder()
+            .method("POST")
+            .uri("/user/edit")
+            .header("Authorization", "Bearer invalid")
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        Ok(())
+    }
+
+    // ----------------- upload avatar -----------------
+    #[tokio::test]
+    async fn upload_avatar_success() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (_uid, token) = new_user_and_token(&pool).await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+
+        let boundary = "boundary";
+        let body = format!(
+            "--{0}\r\nContent-Disposition: form-data; name=\"avatar\"; filename=\"pic.jpg\"\r\nContent-Type: image/jpeg\r\n\r\nfake_image_data\r\n--{0}--\r\n",
+            boundary
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri("/user/avatar")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+        Ok(())
+    }
+
+    // ----------------- get avatar -----------------
+    #[tokio::test]
+    async fn get_avatar_not_found() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (uid, _token) = new_user_and_token(&pool).await;
+        let state = create_state(pool).await;
+        let app = user_app(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri(&format!("/avatars/{}", uid))
+            .body(Body::empty())?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        Ok(())
     }
 }

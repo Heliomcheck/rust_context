@@ -324,18 +324,16 @@ pub async fn update_last_online(pool: &PgPool, user_id: i64) -> Result<(), sqlx:
     
     Ok(())
 }
-
+//test
 #[cfg(test)]
 mod tests {
     use crate::secrets::generator;
-
     use super::*;
     use chrono::Utc;
-
     use crate::test_utils::*;
 
     #[tokio::test]
-    async fn test_create_user_db() {
+    async fn test_create_user_db() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -344,33 +342,24 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         assert!(user_id > 0);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_find_user_by_email() {
+    async fn test_find_user_by_email() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let email = "find@mail.com";
-        create_user_db(
-            &pool,
-            "finduser",
-            email,
-            "Test",
-            &None,
-            &None,
-        )
-        .await
-        .unwrap();
-        let user = find_user_by_email(&pool, email).await.unwrap();
+        create_user_db(&pool, "finduser", email, "Test", &None, &None).await?;
+        let user = find_user_by_email(&pool, email).await?;
         assert!(user.is_some());
         assert_eq!(user.unwrap().email, email);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_edit_user_db() {
+    async fn test_edit_user_db() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -379,10 +368,8 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
-        
+        ).await?;
+
         edit_user_db(
             &pool,
             user_id,
@@ -390,23 +377,18 @@ mod tests {
             Some("New Name"),
             Some("31-01-1999"),
             Some("Updated description"),
-        )
-        .await
-        .unwrap();
-        
-        let user = find_user_by_id(&pool, user_id)
-            .await
-            .unwrap()
-            .unwrap();
-        
+        ).await?;
+
+        let user = find_user_by_id(&pool, user_id).await?.unwrap();
         assert_eq!(user.username, "newusername");
         assert_eq!(user.display_name, "New Name");
         assert_eq!(user.birthday, Some("31-01-1999".to_string()));
         assert_eq!(user.description_profile, Some("Updated description".to_string()));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_create_and_validate_token() {
+    async fn test_create_and_validate_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -415,24 +397,21 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         let token = &generator::Generator::new_session_token();
         create_token(
             &pool,
             user_id,
             token,
             Utc::now() + chrono::Duration::days(30),
-        )
-        .await
-        .unwrap();
-        let valid = validate_token(&pool, token).await.unwrap();
+        ).await?;
+        let valid = validate_token(&pool, token).await?;
         assert!(valid);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_find_user_by_token() {
+    async fn test_find_user_by_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -441,29 +420,18 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-            .await
-            .unwrap();
+        ).await?;
         let token = "find_token";
-
-        create_token(
-            &pool,
-            user_id,
-            token,
-            Utc::now() + chrono::Duration::hours(1),
-        )
-            .await
-            .unwrap();
-
-        let user = find_user_by_token(&pool, token).await.unwrap();
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await?;
+        let user = find_user_by_token(&pool, token).await?;
         assert!(user.is_some());
         assert_eq!(user.unwrap().user_id, user_id);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_deactivate_token() {
+    async fn test_deactivate_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-
         let user_id = create_user_db(
             &pool,
             "deactuser",
@@ -471,25 +439,17 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         let token = "deact_token";
-        create_token(
-            &pool,
-            user_id,
-            token,
-            Utc::now() + chrono::Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        deactivate_token(&pool, token).await.unwrap();
-        let user = find_user_by_token(&pool, token).await.unwrap();
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await?;
+        deactivate_token(&pool, token).await?;
+        let user = find_user_by_token(&pool, token).await?;
         assert!(user.is_none());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_cleanup_expired_tokens() {
+    async fn test_cleanup_expired_tokens() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -498,22 +458,20 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         create_token(
             &pool,
             user_id,
             "expired_token",
             Utc::now() - chrono::Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        let deleted = cleanup_expired_tokens(&pool).await.unwrap();
+        ).await?;
+        let deleted = cleanup_expired_tokens(&pool).await?;
         assert!(deleted > 0);
+        Ok(())
     }
+
     #[tokio::test]
-    async fn test_find_user_by_id() {
+    async fn test_find_user_by_id() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -522,35 +480,26 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
-        let user = find_user_by_id(&pool, user_id).await.unwrap();
+        ).await?;
+        let user = find_user_by_id(&pool, user_id).await?;
         assert!(user.is_some());
         assert_eq!(user.unwrap().user_id, user_id);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_find_user_by_username() {
+    async fn test_find_user_by_username() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let username = "username_test";
-        create_user_db(
-            &pool,
-            username,
-            "username@mail.com",
-            "Test",
-            &None,
-            &None,
-        )
-        .await
-        .unwrap();
-        let user = find_user_by_username(&pool, username).await.unwrap();
+        create_user_db(&pool, username, "username@mail.com", "Test", &None, &None).await?;
+        let user = find_user_by_username(&pool, username).await?;
         assert!(user.is_some());
         assert_eq!(user.unwrap().username, username);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_deactivate_all_user_tokens() {
+    async fn test_deactivate_all_user_tokens() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -559,39 +508,21 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-            .await
-            .unwrap();
+        ).await?;
 
-        create_token(
-            &pool,
-            user_id,
-            "token1",
-            Utc::now() + chrono::Duration::hours(1),
-        )
-            .await
-            .unwrap();
+        create_token(&pool, user_id, "token1", Utc::now() + chrono::Duration::hours(1)).await?;
+        create_token(&pool, user_id, "token2", Utc::now() + chrono::Duration::hours(1)).await?;
+        deactivate_all_user_tokens(&pool, user_id).await?;
 
-        create_token(
-            &pool,
-            user_id,
-            "token2",
-            Utc::now() + chrono::Duration::hours(1),
-        )
-            .await
-            .unwrap();
-        deactivate_all_user_tokens(&pool, user_id)
-            .await
-            .unwrap();
-
-        let user = find_user_by_token(&pool, "token1").await.unwrap();
+        let user = find_user_by_token(&pool, "token1").await?;
         assert!(user.is_none());
-        let user = find_user_by_token(&pool, "token2").await.unwrap();
+        let user = find_user_by_token(&pool, "token2").await?;
         assert!(user.is_none());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_find_token_by_user_id() {
+    async fn test_find_token_by_user_id() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -600,27 +531,17 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         let token = "lookup_token";
-        create_token(
-            &pool,
-            user_id,
-            token,
-            Utc::now() + chrono::Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        let found = find_token_by_user_id(&pool, user_id)
-            .await
-            .unwrap();
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await?;
+        let found = find_token_by_user_id(&pool, user_id).await?;
         assert!(found.is_some());
         assert_eq!(found.unwrap(), token);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_refresh_token() {
+    async fn test_refresh_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -629,46 +550,29 @@ mod tests {
             "Test",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
+        ).await?;
         let old_token = "old_token";
         let new_token = "new_token";
-        create_token(
-            &pool,
-            user_id,
-            old_token,
-            Utc::now() + chrono::Duration::hours(1),
-        )
-        .await
-        .unwrap();
-        refresh_token(
-            &pool,
-            old_token,
-            new_token,
-            Utc::now() + chrono::Duration::hours(2),
-        )
-        .await
-        .unwrap();
-        let old = find_user_by_token(&pool, old_token).await.unwrap();// старый невалиден
+        create_token(&pool, user_id, old_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        refresh_token(&pool, old_token, new_token, Utc::now() + chrono::Duration::hours(2)).await?;
+        let old = find_user_by_token(&pool, old_token).await?;
         assert!(old.is_none());
-        let new = find_user_by_token(&pool, new_token).await.unwrap();// новый валиден
+        let new = find_user_by_token(&pool, new_token).await?;
         assert!(new.is_some());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_validate_token_false() {
+    async fn test_validate_token_false() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        let valid = validate_token(&pool, "non_existing_token")
-            .await
-            .unwrap();
+        let valid = validate_token(&pool, "non_existing_token").await?;
         assert!(!valid);
+        Ok(())
     }
 
     #[tokio::test]
     async fn test_create_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        
         let user_id = create_user_db(
             &pool,
             "tokenuser",
@@ -676,30 +580,21 @@ mod tests {
             "Token User",
             &None,
             &None,
-        )
-        .await?;
-        
+        ).await?;
+
         let token = &generator::Generator::new_session_token();
         let expires_at = Utc::now() + chrono::Duration::days(30);
-        
         create_token(&pool, user_id, token, expires_at).await?;
-        
+
         let row = sqlx::query!(
-            r#"
-            SELECT user_id, token, is_active, expires_at
-            FROM token_store
-            WHERE token = $1
-            "#,
+            r#"SELECT user_id, token, is_active, expires_at FROM token_store WHERE token = $1"#,
             token
-        )
-        .fetch_one(&pool)
-        .await?;
-        
+        ).fetch_one(&pool).await?;
+
         assert_eq!(row.user_id, user_id);
         assert_eq!(row.token, token.to_owned());
         assert_eq!(row.is_active, Some(true));
         assert!(row.expires_at > Utc::now());
-        
         Ok(())
     }
 
@@ -707,20 +602,10 @@ mod tests {
     async fn test_load_all_users() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let email = "loadall@mail.com";
-        create_user_db(
-            &pool,
-            "loadall",
-            email,
-            "Load All",
-            &None,
-            &None,
-        )
-        .await?;
-
+        create_user_db(&pool, "loadall", email, "Load All", &None, &None).await?;
         let users = load_all_users(&pool).await?;
         assert!(!users.is_empty());
         assert!(users.iter().any(|u| u.email == email));
-
         Ok(())
     }
 }

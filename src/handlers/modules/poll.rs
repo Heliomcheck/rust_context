@@ -207,3 +207,276 @@ pub async fn vote_poll_handler(
 
     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{Router, body::Body, http::Request};
+    use tower::ServiceExt;
+    use std::sync::Arc;
+    use tokio::sync::{Mutex, broadcast};
+    use serde_json::json;
+
+    use crate::{
+        test_utils::setup_test_db,
+        structs::AppState,
+        user_store::UserStore,
+        secrets::verification::VerificationStore,
+        data_base::{
+            user_db::{create_user_db, create_token},
+            event_db::{create_event, add_member},
+        },
+        permissions::EventPermissions,
+    };
+
+    /// Создаёт пользователя с токеном и событие, добавляет пользователя в событие с указанными правами.
+    async fn setup(perm: i32) -> (Router, Arc<AppState>, i64, String, i64) {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "poll_user", "poll_user@test.com", "Poll User", &None, &None).await.unwrap();
+        let token = "poll_token";
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        let event_id = create_event(&pool, "Poll Event", None, None, None, Some("Room".into()), "#000".into()).await.unwrap();
+        add_member(&pool, user_id, event_id, perm).await.unwrap();
+
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+
+        let app = Router::new()
+            .route("/events/:event_id/planning/poll", routing::post(create_poll_handler))
+            .route("/events/:event_id/planning/poll/:poll_id", routing::put(update_poll_handler))
+            .route("/events/:event_id/planning/poll/:poll_id", routing::delete(delete_poll_handler))
+            .route("/events/:event_id/planning/poll/:poll_id/vote", routing::post(vote_poll_handler))
+            .with_state(state.clone());
+
+        (app, state, event_id, token.to_string(), user_id)
+    }
+
+    // ----------------- create poll -----------------
+    #[tokio::test]
+    async fn create_poll_success() -> anyhow::Result<()> {
+        let (app, _st, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
+        let payload = json!({"title":"Best day?","options":["Mon","Tue"],"multiple_choice":false});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_poll_too_few_options() -> anyhow::Result<()> {
+        let (app, _st, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
+        let payload = json!({"title":"Fail","options":["OnlyOne"],"multiple_choice":false});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_poll_not_in_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let stranger_id = create_user_db(&pool, "stranger", "stranger@test.com", "Stranger", &None, &None).await.unwrap();
+        let token = "stranger_token";
+        create_token(&pool, stranger_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#000".into()).await.unwrap();
+        // stranger не добавлен в событие
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        let app = Router::new()
+            .route("/events/:event_id/planning/poll", routing::post(create_poll_handler))
+            .with_state(state);
+
+        let payload = json!({"title":"Poll","options":["A","B"],"multiple_choice":false});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        Ok(())
+    }
+
+    // ----------------- vote poll -----------------
+    async fn poll_with_voter() -> (Router, Arc<AppState>, i64, String, i64, i64) {
+        let pool = setup_test_db().await;
+        let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
+        let voter_id = create_user_db(&pool, "voter", "voter@test.com", "Voter", &None, &None).await.unwrap();
+        let token = "voter_token";
+        create_token(&pool, voter_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        let event_id = create_event(&pool, "Vote Event", None, None, None, None, "#000".into()).await.unwrap();
+        add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
+        add_member(&pool, voter_id, event_id, EventPermissions::MEMBER).await.unwrap();
+        let poll_id = create_poll(&pool, event_id, "Q".into(), creator_id, vec!["A".into(), "B".into()], false).await.unwrap();
+
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        let app = Router::new()
+            .route("/events/:event_id/planning/poll/:poll_id/vote", routing::post(vote_poll_handler))
+            .with_state(state.clone());
+        (app, state, event_id, token, voter_id, poll_id)
+    }
+
+    #[tokio::test]
+    async fn vote_success() -> anyhow::Result<()> {
+        let (app, _st, event_id, token, _voter, poll_id) = poll_with_voter().await;
+        let payload = json!({"option_indexes":[0]});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll/{}/vote", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn vote_invalid_option_index() -> anyhow::Result<()> {
+        let (app, _st, event_id, token, _voter, poll_id) = poll_with_voter().await;
+        let payload = json!({"option_indexes":[5]});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll/{}/vote", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn vote_not_in_event() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let stranger_id = create_user_db(&pool, "voter_stranger", "voter_stranger@test.com", "Stranger", &None, &None).await.unwrap();
+        let token = "stranger_token";
+        create_token(&pool, stranger_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#000".into()).await.unwrap();
+        // stranger не в событии, но poll может существовать отдельно, тест на то, что handler проверит членство
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+        });
+        let app = Router::new()
+            .route("/events/:event_id/planning/poll/:poll_id/vote", routing::post(vote_poll_handler))
+            .with_state(state);
+
+        let payload = json!({"option_indexes":[0]});
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!("/events/{}/planning/poll/999/vote", event_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        Ok(())
+    }
+
+    // ----------------- update poll -----------------
+    #[tokio::test]
+    async fn update_poll_owner() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
+        let poll_id = create_poll(&pool, event_id, "Old Q".into(), user_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
+        let payload = json!({"question":"New Q"});
+        let req = Request::builder()
+            .method("PUT")
+            .uri(&format!("/events/{}/planning/poll/{}", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_poll_not_owner() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
+        let poll_id = create_poll(&pool, event_id, "Q".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
+        let member_id = create_user_db(&pool, "member_update", "member_update@test.com", "Member", &None, &None).await.unwrap();
+        let member_token = "member_token";
+        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
+
+        let payload = json!({"question":"Hack"});
+        let req = Request::builder()
+            .method("PUT")
+            .uri(&format!("/events/{}/planning/poll/{}", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", member_token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        Ok(())
+    }
+
+    // ----------------- delete poll -----------------
+    #[tokio::test]
+    async fn delete_poll_owner() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
+        let poll_id = create_poll(&pool, event_id, "Del".into(), user_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/events/{}/planning/poll/{}", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_poll_not_owner() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
+        let poll_id = create_poll(&pool, event_id, "Del".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
+        let member_id = create_user_db(&pool, "member_del", "member_del@test.com", "Member", &None, &None).await.unwrap();
+        let member_token = "member_del_token";
+        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
+
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/events/{}/planning/poll/{}", event_id, poll_id))
+            .header("Authorization", format!("Bearer {}", member_token))
+            .body(Body::empty())?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        Ok(())
+    }
+}

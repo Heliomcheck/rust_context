@@ -355,12 +355,32 @@ mod tests {
     use crate::test_utils::*;
 
     //test
-    #[tokio::test]//registretion check
-    async fn test_register_handler() {
+    #[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use axum::{Router, routing};
+    use tokio::sync::Mutex;
+    use axum::http::StatusCode;
+    use serde_json::json;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::util::ServiceExt;
+
+    use crate::{
+        data_base::user_db::*,
+        structs::*,
+        user_store::*,
+        secrets::verification::VerificationStore,
+        *
+    };
+    use crate::test_utils::*;
+
+    #[tokio::test]
+    async fn test_register_handler() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
 
-        sqlx::query!("DELETE FROM token_store").execute(&pool).await.unwrap();
-        sqlx::query!("DELETE FROM users").execute(&pool).await.unwrap();
+        sqlx::query!("DELETE FROM token_store").execute(&pool).await?;
+        sqlx::query!("DELETE FROM users").execute(&pool).await?;
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -379,7 +399,7 @@ mod tests {
                 "email": "test@mail.com",
                 "birthday": null,
                 "display_name": "Test",
-                "avatar_url": null
+                "description": null
             }
         });
 
@@ -387,15 +407,15 @@ mod tests {
             .method("POST")
             .uri("/auth/register")
             .header("content-type", "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap();
+            .body(Body::from(payload.to_string()))?;
 
-        let response = app.oneshot(request).await.unwrap();
-
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), axum::http::StatusCode::CREATED);
+        Ok(())
     }
-    #[tokio::test]// Проверяет, что невалидный токен возвращает UNAUTHORIZED
-    async fn test_token_validate_handler_invalid() {
+
+    #[tokio::test]
+    async fn test_token_validate_handler_invalid() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -410,14 +430,14 @@ mod tests {
             .method("POST")
             .uri("/auth/token-validate")
             .header("Authorization", "Bearer invalid")
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
+            .body(Body::empty())?;
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        Ok(())
     }
 
-    #[tokio::test]// Проверяет, что logout успешен и токен деактивирован
-    async fn test_logout_handler_success() {
+    #[tokio::test]
+    async fn test_logout_handler_success() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -426,11 +446,9 @@ mod tests {
             "Logout User",
             &None,
             &None,
-        ).await.unwrap();
+        ).await?;
         let token = "logout_token";
-        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1))
-            .await
-            .unwrap();
+        create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await?;
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -447,18 +465,18 @@ mod tests {
             .method("POST")
             .uri("/auth/logout")
             .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
+            .body(Body::empty())?;
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), StatusCode::OK);
 
-        let user = find_user_by_token(&pool, token).await.unwrap();
+        let user = find_user_by_token(&pool, token).await?;
         assert!(user.is_none());
+        Ok(())
     }
 
-    #[tokio::test]// Проверяет, что занятый username корректно обрабатывается эндпоинтом
-    async fn test_username_check_handler() {
+    #[tokio::test]
+    async fn test_username_check_handler() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         create_user_db(
             &pool,
@@ -467,7 +485,7 @@ mod tests {
             "Test",
             &None,
             &None,
-        ).await.unwrap();
+        ).await?;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             user_store: Arc::new(Mutex::new(UserStore::new())),
@@ -482,22 +500,20 @@ mod tests {
             .method("POST")
             .uri("/auth/check-username")
             .header("content-type", "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
+            .body(Body::from(payload.to_string()))?;
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), StatusCode::OK);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_verify_code_new_user() {
+    async fn test_verify_code_new_user() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        
+
         let email = "new@mail.com";
-        let _ = "123456";
-        
         let mut verification = VerificationStore::new();
         let code = verification.create(email, 60);
-        
+
         let user_id = create_user_db(
             &pool,
             "newuser",
@@ -505,45 +521,41 @@ mod tests {
             "New User",
             &None,
             &None,
-        )
-        .await
-        .unwrap();
-        
+        ).await?;
+
         let token = "test_token";
         let expires_at = Utc::now() + chrono::Duration::days(30);
-        create_token(&pool, user_id, token, expires_at).await.unwrap();
-        
+        create_token(&pool, user_id, token, expires_at).await?;
+
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(verification)),
             db_pool: pool,
         });
-        
+
         let app = Router::new()
             .route("/auth/verify-code", routing::post(verify_code_handler))
             .with_state(state);
-        
+
         let payload = json!({
             "email": email,
             "code": code
         });
-        
+
         let request = Request::builder()
             .method("POST")
             .uri("/auth/verify-code")
             .header("content-type", "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap();
-        
-        let response = app.oneshot(request).await.unwrap();
-        
-        // verify_code_handler возвращает 200 OK с NewUserVerifyResponse для существующего пользователя
+            .body(Body::from(payload.to_string()))?;
+
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), StatusCode::OK);
+        Ok(())
     }
 
-    #[tokio::test]// Проверяет, что неверный код возвращает ошибку
-    async fn test_verify_code_invalid() {
+    #[tokio::test]
+    async fn test_verify_code_invalid() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -559,33 +571,9 @@ mod tests {
             .method("POST")
             .uri("/auth/verify-code")
             .header("content-type", "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
+            .body(Body::from(payload.to_string()))?;
+        let response = app.oneshot(request).await?;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        Ok(())
     }
-
-    // #[tokio::test]// Проверяет, что код можно запросить повторно
-    // async fn test_resend_code_handler() {
-    //     let pool = setup_test_db().await;
-    //     let state = Arc::new(AppState {
-    //         tx: broadcast::channel(10).0,
-    //         user_store: Arc::new(Mutex::new(UserStore::new())),
-    //         verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-    //         db_pool: pool,
-    //     });
-    //     let app = Router::new()
-    //         .route("/auth/resend", routing::post(resend_code_handler))
-    //         .with_state(state);
-    //     let payload = json!({ "email": "test@mail.com" });
-    //     let request = Request::builder()
-    //         .method("POST")
-    //         .uri("/auth/resend")
-    //         .header("content-type", "application/json")
-    //         .body(Body::from(payload.to_string()))
-    //         .unwrap();
-    //     let response = app.oneshot(request).await.unwrap();
-    //     assert!(response.status().is_success() || response.status() == StatusCode::TOO_MANY_REQUESTS);
-    //     // Может быть OK или TOO_MANY_REQUESTS в зависимости от cooldown
-    // }
 }

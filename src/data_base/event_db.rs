@@ -205,432 +205,6 @@ pub async fn check_user_in_event(
         return Ok(false)
     }
 }
-
-#[cfg(test)]
-pub async fn get_event_members(
-    pool: &PgPool,
-    event_id: i64,
-) -> Result<Vec<EventMembers>, AppError> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT u.user_id, u.username, eu.permissions, eu.joined_at
-        FROM event_user eu
-        JOIN users u ON eu.user_id = u.user_id
-        WHERE eu.event_id = $1
-        ORDER BY eu.joined_at ASC
-        "#,
-        event_id
-    )
-    .fetch_all(pool)
-    .await?;
-
-
-     Ok(rows.into_iter().map(|r| EventMembers {
-         user_id: r.user_id,
-         username: r.username,
-         permissions: r.permissions,
-         joined_at: r.joined_at.unwrap()
-     }).collect())
-}
-
-pub async fn update_event(
-    pool: &PgPool,
-    event_id: i64,
-    title: Option<String>,
-    description_event: Option<String>,
-    start_date_time: Option<DateTime<Utc>>,
-    end_date_time: Option<DateTime<Utc>>,
-    color: Option<String>,
-    location: Option<String>
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        UPDATE events
-        SET 
-            title = COALESCE($1, title),
-            description_event = COALESCE($2, description_event),
-            start_date_time = COALESCE($3, start_date_time),
-            end_date_time = COALESCE($4, end_date_time),
-            color = COALESCE($5, color),
-            location = COALESCE($6, location)
-        WHERE event_id = $7
-        "#,
-        title,
-        description_event,
-        start_date_time,
-        end_date_time,
-        color,
-        location,
-        event_id
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn update_event_status(
-    pool: &PgPool,
-    event_id: i64,
-    status_event: String,
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        UPDATE events
-        SET status_event = $1
-        WHERE event_id = $2
-        "#,
-        status_event,
-        event_id
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub async fn find_users_by_permission(
-    pool: &PgPool,
-    event_id: i64,
-    required_permission: i32,
-) -> Result<Vec<i64>, AppError> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT u.user_id
-        FROM users u
-        JOIN event_user eu ON u.user_id = eu.user_id
-        WHERE eu.event_id = $1 AND (eu.permissions & $2) != 0
-        "#,
-        event_id,
-        required_permission
-    )
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows.into_iter().map(|row| row.user_id).collect())
-}
-
-// Members
-
-pub async fn add_member(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-    permissions: i32
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        INSERT INTO event_user (user_id, event_id, permissions)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (user_id, event_id) DO UPDATE
-        SET permissions = $3
-        "#,
-        user_id,
-        event_id,
-        permissions
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn remove_member(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        DELETE FROM event_user
-        WHERE user_id = $1 AND event_id = $2
-        "#,
-        user_id,
-        event_id
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub async fn update_member_role(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-    permissions: i32,
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        UPDATE event_user
-        SET permissions = $1
-        WHERE user_id = $2 AND event_id = $3
-        "#,
-        permissions,
-        user_id,
-        event_id
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn has_permission(
-    pool: &PgPool,
-    event_id: i64,
-    user_id: i64,
-    permission: i32,
-) -> Result<bool, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT (permissions & $1) != 0 as has_perm
-        FROM event_user
-        WHERE event_id = $2 AND user_id = $3
-        "#,
-        permission,
-        event_id,
-        user_id
-    )
-    .fetch_optional(pool)
-    .await?
-    .is_some();
-
-    Ok(row)
-}
-
-// #[allow(dead_code)]
-// pub async fn create_event_token(
-//     pool: &PgPool,
-//     event_id: i64,
-//     expires_in_hours: i64,
-// ) -> Result<String, AppError> {
-//     let event_token = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
-//     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
-    
-//     sqlx::query!(
-//         r#"
-//         INSERT INTO event_token (event_token, event_id, expires_at)
-//         VALUES ($1, $2, $3)
-//         "#,
-//         event_token,
-//         event_id,
-//         expires_at
-//     )
-//     .execute(pool)
-//     .await?;
-    
-//     Ok(event_token)
-// }
-
-#[allow(dead_code)]
-pub async fn get_event_id_by_token(
-    pool: &PgPool,
-    event_token: &str,
-) -> Result<Option<i64>, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT event_id
-        FROM event_token
-        WHERE event_token = $1 AND expires_at > NOW()
-        "#,
-        event_token
-    )
-    .fetch_optional(pool)
-    .await?;
-    
-    Ok(row.map(|r| r.event_id))
-}
-
-#[allow(dead_code)]
-pub async fn is_user_in_event(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-) -> Result<bool, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM event_user
-            WHERE user_id = $1 AND event_id = $2
-        ) as "exists!"
-        "#,
-        user_id,
-        event_id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Ok(row.exists)
-}
-
-pub async fn delete_event(
-    pool: &PgPool,
-    event_id: i64,
-) -> Result<(), AppError> {
-    // Начинаем транзакцию
-    let mut tx = pool.begin().await?;
-    
-    // 1. Удаляем всех участников события
-    sqlx::query!(
-        r#"
-        DELETE FROM event_user
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // 2. Удаляем invite токены
-    sqlx::query!(
-        r#"
-        DELETE FROM event_token
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // 3. Удаляем опросы и связанные с ними данные
-    // Сначала удаляем голоса
-    sqlx::query!(
-        r#"
-        DELETE FROM poll_votes
-        WHERE poll_id IN (SELECT poll_id FROM poll WHERE event_id = $1)
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // Удаляем варианты опросов
-    sqlx::query!(
-        r#"
-        DELETE FROM poll_option
-        WHERE poll_id IN (SELECT poll_id FROM poll WHERE event_id = $1)
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // Удаляем сами опросы
-    sqlx::query!(
-        r#"
-        DELETE FROM poll
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // 4. Удаляем item_list'ы и их пункты (CASCADE сделает это автоматически)
-    sqlx::query!(
-        r#"
-        DELETE FROM item_list
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // 5. Удаляем task_list'ы и их задачи (CASCADE сделает это автоматически)
-    sqlx::query!(
-        r#"
-        DELETE FROM task_list
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    
-    // 6. Удаляем само событие
-    let rows_affected = sqlx::query!(
-        r#"
-        DELETE FROM events
-        WHERE event_id = $1
-        "#,
-        event_id
-    )
-    .execute(&mut *tx)
-    .await?
-    .rows_affected();
-    
-    if rows_affected == 0 {
-        return Err(AppError::NotFound("Event not found".to_string()));
-    }
-    
-    // Коммитим транзакцию
-    tx.commit().await?;
-    
-    Ok(())
-}
-
-pub async fn create_event_token(
-    pool: &PgPool,
-    event_id: i64,
-    expires_in_hours: i64,
-) -> Result<String, AppError> {
-    let token = crate::secrets::generator::Generator::new_session_token(); // 32 символа
-    let expires_at = Utc::now() + Duration::hours(expires_in_hours);
-    
-    sqlx::query!(
-        r#"
-        INSERT INTO event_token (event_token, event_id, expires_at)
-        VALUES ($1, $2, $3)
-        "#,
-        token,
-        event_id,
-        expires_at
-    )
-    .execute(pool)
-    .await?;
-    
-    Ok(token)
-}
-
-pub async fn is_event_token_valid(
-    pool: &PgPool,
-    token: &str,
-) -> Result<bool, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM event_token
-            WHERE event_token = $1 AND expires_at > NOW()
-        ) as "exists!"
-        "#,
-        token
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Ok(row.exists)
-}
-
-pub async fn delete_event_token(
-    pool: &PgPool,
-    token: &str,
-) -> Result<(), AppError> {
-    sqlx::query!(
-        r#"
-        DELETE FROM event_token
-        WHERE event_token = $1
-        "#,
-        token
-    )
-    .execute(pool)
-    .await?;
-    
-    Ok(())
-}
 //test
 #[cfg(test)]
 mod tests {
@@ -638,7 +212,6 @@ mod tests {
     use crate::test_utils::setup_test_db;
     use crate::data_base::user_db::create_user_db;
 
-//EVENT
     #[tokio::test]
     async fn test_create_and_get_event() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
@@ -669,10 +242,10 @@ mod tests {
     async fn test_update_event() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let event_id = create_event(
-            &pool, 
-            "Old", 
-            None, 
-            None, 
+            &pool,
+            "Old",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
@@ -692,25 +265,6 @@ mod tests {
         Ok(())
     }
 
-    // #[tokio::test]
-    // async fn test_update_event_status() -> anyhow::Result<()> {
-    //     let pool = setup_test_db().await;
-    //     let event_id = create_event(
-    //         &pool, 
-    //         "Test", 
-    //         None, 
-    //         None, 
-    //         None,
-    //         "#123456".to_string()
-    //     ).await?;
-    //     update_event_status(&pool, event_id, 2).await?;
-    //     let event = get_event_by_id(&pool, event_id).await?;
-    //     assert_eq!(event.7, 2);
-    //     Ok(())
-    // }
-
-// Members
-
     #[tokio::test]
     async fn test_add_and_check_member() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
@@ -723,15 +277,15 @@ mod tests {
             &None,
         ).await?;
         let event_id = create_event(
-            &pool, 
-            "Event", 
-            None, 
-            None, 
+            &pool,
+            "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 10,).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(exists);
         Ok(())
@@ -749,14 +303,14 @@ mod tests {
             &None,
         ).await?;
         let event_id = create_event(
-            &pool, "Event", 
-            None, 
-            None, 
+            &pool, "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 1,).await?;
+        add_member(&pool, user_id, event_id, 1).await?;
         remove_member(&pool, user_id, event_id).await?;
         let exists = is_user_in_event(&pool, user_id, event_id).await?;
         assert!(!exists);
@@ -775,14 +329,14 @@ mod tests {
             &None,
         ).await?;
         let event_id = create_event(
-            &pool, "Event", 
-            None, 
-            None, 
+            &pool, "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 10,).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
         update_member_role(&pool, user_id, event_id, 01).await?;
         let members = get_event_members(&pool, event_id).await?;
         assert_eq!(members[0].permissions, 01);
@@ -801,20 +355,18 @@ mod tests {
             &None,
         ).await?;
         let event_id = create_event(
-            &pool, "Event", 
-            None, 
-            None, 
+            &pool, "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 10,).await?; 
+        add_member(&pool, user_id, event_id, 10).await?;
         let members = get_event_members(&pool, event_id).await?;
         assert_eq!(members[0].permissions, 10);
         Ok(())
     }
-
-//USER EVENTS
 
     #[tokio::test]
     async fn test_get_user_events() -> anyhow::Result<()> {
@@ -828,9 +380,9 @@ mod tests {
             &None,
         ).await?;
         let event_id = create_event(
-            &pool, "Event", 
-            None, 
-            None, 
+            &pool, "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
@@ -841,15 +393,13 @@ mod tests {
         Ok(())
     }
 
-//TOKENS
-
     #[tokio::test]
     async fn test_event_token() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let event_id = create_event(
-            &pool, "Event", 
-            None, 
-            None, 
+            &pool, "Event",
+            None,
+            None,
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
@@ -870,8 +420,7 @@ mod tests {
             "User Event",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
         let event_id = create_event(
             &pool,
             "Event",
@@ -880,9 +429,8 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
-        add_member(&pool, user_id, event_id, 10 ).await?;
+        ).await?;
+        add_member(&pool, user_id, event_id, 10).await?;
 
         let event = get_user_event(&pool, user_id, 1, 0, "active".to_string()).await?;
         assert_eq!(event.event_id, event_id);
@@ -899,8 +447,7 @@ mod tests {
             "User List",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
         let event_id = create_event(
             &pool,
             "Event",
@@ -909,8 +456,7 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
+        ).await?;
         add_member(&pool, user_id, event_id, 10).await?;
 
         let users = get_users_in_event(&pool, event_id).await?;
@@ -929,8 +475,7 @@ mod tests {
             "User Check",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
         let event_id = create_event(
             &pool,
             "Event",
@@ -939,8 +484,7 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
+        ).await?;
         add_member(&pool, user_id, event_id, 10).await?;
 
         assert!(check_user_in_event(&pool, event_id, user_id).await?);
@@ -958,8 +502,7 @@ mod tests {
             "Member User",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
         let event_id = create_event(
             &pool,
             "Event",
@@ -968,8 +511,7 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
+        ).await?;
         add_member(&pool, user_id, event_id, 10).await?;
 
         let members = get_event_members(&pool, event_id).await?;
@@ -990,8 +532,7 @@ mod tests {
             "Perm User",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
         let event_id = create_event(
             &pool,
             "Event",
@@ -1000,11 +541,9 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
-        
-        // Даём права, которые включают бит 4 (например, 4, 5, 6, 7, 12, 13, 14, 15)
-        add_member(&pool, user_id, event_id, 4).await?;  // 👈 меняем на 4
+        ).await?;
+
+        add_member(&pool, user_id, event_id, 4).await?;
 
         let users = find_users_by_permission(&pool, event_id, 4).await?;
         assert_eq!(users, vec![user_id]);
@@ -1023,11 +562,10 @@ mod tests {
             None,
             Some("uiu".to_string()),
             "#123456".to_string()
-        )
-        .await?;
-        update_event_status(&pool, event_id, "OPEN".to_string()).await?;
+        ).await?;
+        update_event_status(&pool, event_id, "archived".to_string()).await?;
         let event = get_event_by_id(&pool, event_id).await?;
-        assert_eq!(event.status_event, "OPEN".to_string());
+        assert_eq!(event.status_event, "archived");
         Ok(())
     }
 }
