@@ -257,5 +257,5 @@ pub async fn delete_task_list_handler(
 
     delete_task_list(&state.db_pool, module_id, event_id).await?;
 
-    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }

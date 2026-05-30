@@ -239,5 +239,5 @@ pub async fn delete_item_list_handler(
     // 3. Удаляем
     delete_item_list(&state.db_pool, module_id, event_id).await?;
 
-    Ok((StatusCode::NO_CONTENT, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
 }

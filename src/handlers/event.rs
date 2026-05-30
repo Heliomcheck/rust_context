@@ -282,7 +282,7 @@ pub async fn delete_event_handler(
     
     delete_event(&state.db_pool, event_id).await?;
     
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
