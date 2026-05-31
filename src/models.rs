@@ -289,7 +289,6 @@ pub struct UpdateItemsListRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignItemRequest {
-    pub item_list_id: i64,
     pub assign: bool,   // true - забронировать, false - отказаться
 }
 
@@ -324,14 +323,12 @@ pub struct UpdateTaskListRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignTaskRequest {
-    pub task_list_id: i64,
     pub task_id: i64,
     pub assign: bool,   // true - забронировать, false - отказаться
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CompleteTaskRequest {
-    pub task_list_id: i64,
     pub task_id: i64,
     pub completed: bool,
 }

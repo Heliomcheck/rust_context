@@ -30,7 +30,7 @@ use crate::{
 
 #[utoipa::path(
     post,
-    path = "/events/{event_id}/planning/items",
+    path = "/events/{event_id}/planning/item_list",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -50,27 +50,23 @@ pub async fn create_item_list_handler(
     Path(event_id): Path<i64>,
     Json(payload): Json<CreateItemListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Проверяем токен и получаем user_id
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token)
         .await?
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    // 2. Проверяем, что пользователь состоит в событии
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user_id).await?;
     if !is_in_event {
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    // 3. Проверяем права на создание (нужны права на редактирование)
     let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?; // 2 = EDIT_EVENT
     if !has_perm {
         return Err(AppError::Forbidden("No permission to create item list".to_string()));
     }
 
-    // 4. Создаем item_list
-    let item_list = create_item_list(
+    let _ = create_item_list(
         &state.db_pool,
         event_id,
         &payload.title,
@@ -79,12 +75,12 @@ pub async fn create_item_list_handler(
     )
     .await?;
 
-    Ok((StatusCode::CREATED, Json(item_list)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     patch,
-    path = "/events/{event_id}/planning/items/{module_id}",
+    path = "/events/{event_id}/planning/item_list/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -104,32 +100,27 @@ pub async fn update_item_list_handler(
     Path((event_id, module_id)): Path<(i64, i64)>,
     Json(payload): Json<UpdateItemsListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Проверяем токен
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token)
         .await?
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    // 2. Проверяем, что пользователь в событии
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user_id).await?;
     if !is_in_event {
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    // 3. Проверяем права на редактирование
     let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to update item list".to_string()));
     }
 
-    // 4. Проверяем, что item_list принадлежит событию
     let belongs = verify_item_list_in_event(&state.db_pool, module_id, event_id).await?;
     if !belongs {
         return Err(AppError::NotFound("Not found".to_string()));
     }
 
-    // 5. Обновляем
     let add = payload.add.unwrap_or_default();
     let remove = payload
         .remove
@@ -139,7 +130,7 @@ pub async fn update_item_list_handler(
         .collect::<Result<Vec<i64>, _>>()
         .map_err(|_| AppError::BadRequest("Invalid item id format".to_string()))?;
     
-    let updated = update_item_list(
+    let _ = update_item_list(
         &state.db_pool,
         module_id,
         &add,
@@ -147,12 +138,12 @@ pub async fn update_item_list_handler(
     )
     .await?;
 
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     patch,
-    path = "/events/{event_id}/planning/items/{module_id}/items/{item_id}/assign",
+    path = "/events/{event_id}/planning/item_list/{module_id}/items/{item_list_id}/assign",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -172,39 +163,34 @@ pub async fn assign_item_handler(
     Path((event_id, module_id, item_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<AssignItemRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Проверяем токен
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token)
         .await?
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    // 2. Проверяем, что пользователь в событии
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user_id).await?;
     if !is_in_event {
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    // 3. Проверяем, что item_list принадлежит событию
     let belongs = verify_item_list_in_event(&state.db_pool, module_id, event_id).await?;
     if !belongs {
         return Err(AppError::NotFound("Not found".to_string()));
     }
 
-    // 4. Бронируем/отменяем
     assign_item(&state.db_pool, item_id, user_id, payload.assign).await?;
 
-    // 5. Возвращаем обновленный модуль
-    let updated = get_item_list(&state.db_pool, module_id)
+    let _ = get_item_list(&state.db_pool, module_id)
         .await?
         .ok_or(AppError::NotFound("Not found".to_string()))?;
 
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     post,
-    path = "/events/{event_id}/planning/items/{module_id}",
+    path = "/events/{event_id}/planning/item_list/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -223,20 +209,17 @@ pub async fn delete_item_list_handler(
     auth: TypedHeader<Authorization<Bearer>>,
     Path((event_id, module_id)): Path<(i64, i64)>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Проверяем токен
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token)
         .await?
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    // 2. Проверяем права на удаление
     let has_perm = has_permission(&state.db_pool, event_id, user_id, 4).await?; // 4 = DELETE_EVENT
     if !has_perm {
         return Err(AppError::Forbidden("No permission to delete item list".to_string()));
     }
 
-    // 3. Удаляем
     delete_item_list(&state.db_pool, module_id, event_id).await?;
 
     Ok((StatusCode::OK, Json(SuccessResponse {success: true})))

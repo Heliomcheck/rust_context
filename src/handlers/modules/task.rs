@@ -18,14 +18,14 @@ use crate::{
 
 #[utoipa::path(
     post,
-    path = "/events/{event_id}/planning/tasks",
+    path = "/events/{event_id}/planning/task_list",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
     ),
     request_body = CreateTaskListRequest,
     responses(
-        (status = 201, description = "Task list created", body = CreateTaskListResponse),
+        (status = 201, description = "Task list created", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
@@ -54,7 +54,7 @@ pub async fn create_task_list_handler(
         return Err(AppError::Forbidden("No permission to create task list".to_string()));
     }
 
-    let task_list = create_task_list(
+    let _ = create_task_list(
         &state.db_pool,
         event_id,
         &payload.title,
@@ -63,12 +63,12 @@ pub async fn create_task_list_handler(
     )
     .await?;
 
-    Ok((StatusCode::CREATED, Json(task_list)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     patch,
-    path = "/events/{event_id}/planning/tasks/{module_id}",
+    path = "/events/{event_id}/planning/task_list/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -114,7 +114,7 @@ pub async fn update_task_list_handler(
         .filter_map(|id| id.parse::<i64>().ok())
         .collect();
     
-    let updated = update_task_list(
+    let _ = update_task_list(
         &state.db_pool,
         payload.task_list_id,
         &add_tasks,
@@ -122,19 +122,19 @@ pub async fn update_task_list_handler(
     )
     .await?;
     
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
-    post,
-    path = "/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign",
+    patch,
+    path = "/events/{event_id}/planning/task_list/{module_id}/tasks/{task_id}/assign",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
     ),
     request_body = AssignTaskRequest,
     responses(
-        (status = 200, description = "Task assigned/unassigned successfully", body = TaskListWithItems),
+        (status = 200, description = "Task assigned/unassigned successfully", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission or not in event", body = ErrorResponse),
         (status = 404, description = "Task or event not found", body = ErrorResponse),
@@ -144,46 +144,46 @@ pub async fn update_task_list_handler(
 pub async fn assign_task_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    query: Query<EventPaths>,
+    Path((event_id, module_id, task_list_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<AssignTaskRequest>
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
-    let is_in_event = check_user_in_event(&state.db_pool, query.event_id, user.user_id).await?;
+    let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_in_event {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
     
-    let belongs = verify_task_list_in_event(&state.db_pool, payload.task_list_id, query.event_id).await?;
+    let belongs = verify_task_list_in_event(&state.db_pool, task_list_id, event_id).await?;
     if !belongs {
         return Err(AppError::NotFound("Task list not found in this event".to_string()));
     }
     
     assign_task(
         &state.db_pool,
-        payload.task_list_id,
+        task_list_id,
         user.user_id,
         payload.assign,
     )
     .await?;
     
-    let updated = get_task_list(&state.db_pool, payload.task_list_id)
+    let _ = get_task_list(&state.db_pool, task_list_id)
         .await?
         .ok_or(AppError::NotFound("Task list not found".to_string()))?;
     
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
-    post,
-    path = "/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete",
+    patch,
+    path = "/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/complete",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
     ),
     request_body = CompleteTaskRequest,
     responses(
-        (status = 200, description = "Task completed/uncompleted successfully", body = TaskListWithItems),
+        (status = 200, description = "Task completed/uncompleted successfully", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "User doesn't have permission or not in event", body = ErrorResponse),
         (status = 404, description = "Task or event not found", body = ErrorResponse),
@@ -193,17 +193,17 @@ pub async fn assign_task_handler(
 pub async fn complete_task_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    query: Query<EventModulesPaths>,
+    Path((event_id, module_id, task_list_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<CompleteTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
-    let is_in_event = check_user_in_event(&state.db_pool, query.event_id, user.user_id).await?;
+    let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_in_event {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
     
-    let belongs = verify_task_list_in_event(&state.db_pool, payload.task_list_id, query.event_id).await?;
+    let belongs = verify_task_list_in_event(&state.db_pool, task_list_id, event_id).await?;
     if !belongs {
         return Err(AppError::NotFound("Task list not found in this event".to_string()));
     }
@@ -216,16 +216,16 @@ pub async fn complete_task_handler(
     )
     .await?;
     
-    let updated = get_task_list(&state.db_pool, payload.task_list_id)
+    let _ = get_task_list(&state.db_pool, task_list_id)
         .await?
-        .ok_or(AppError::NotFound("Task list not found".to_string()))?;
-    
-    Ok((StatusCode::OK, Json(updated)))
+        .ok_or_else(|| AppError::NotFound("Task list not found".to_string()))?;
+
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     post,
-    path = "/modules/task_list/delete_task_list",
+    path = "/events/{event_id}/planning/task_list/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])

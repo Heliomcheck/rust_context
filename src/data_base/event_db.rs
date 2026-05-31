@@ -615,21 +615,60 @@ pub async fn is_event_token_valid(
     Ok(row.exists)
 }
 
-pub async fn delete_event_token(
+// pub async fn delete_event_token(
+//     pool: &PgPool,
+//     token: &str,
+// ) -> Result<(), AppError> {
+//     sqlx::query!(
+//         r#"
+//         DELETE FROM event_token
+//         WHERE event_token = $1
+//         "#,
+//         token
+//     )
+//     .execute(pool)
+//     .await?;
+    
+//     Ok(())
+// }
+
+pub async fn get_or_create_event_token(
     pool: &PgPool,
-    token: &str,
-) -> Result<(), AppError> {
+    event_id: i64,
+) -> Result<String, AppError> {
+    let existing = sqlx::query!(
+        r#"
+        SELECT event_token
+        FROM event_token
+        WHERE event_id = $1 AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+        event_id
+    )
+    .fetch_optional(pool)
+    .await?;
+    
+    if let Some(row) = existing {
+        return Ok(row.event_token);
+    }
+    
+    let token = crate::secrets::generator::Generator::new_session_token();
+    let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+    
     sqlx::query!(
         r#"
-        DELETE FROM event_token
-        WHERE event_token = $1
+        INSERT INTO event_token (event_token, event_id, expires_at)
+        VALUES ($1, $2, $3)
         "#,
-        token
+        token,
+        event_id,
+        expires_at
     )
     .execute(pool)
     .await?;
     
-    Ok(())
+    Ok(token)
 }
 //test
 #[cfg(test)]

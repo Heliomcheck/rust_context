@@ -175,27 +175,52 @@ pub async fn get_detailed_event_handler(
 
     let permissions = get_user_permissions(&state.db_pool, event.event_id, user.user_id).await?;
 
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
+    match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {
-            let invite_token = create_event_token(&state.db_pool, event_id, 144).await?;
-            let invite_link = format!("https://kruug.netlify.app/invite?token={}", invite_token);
-            return Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
-                    event: event, 
-                    invite_link: Some(invite_link), 
-                    members: members,
-                    permissions: format!("{:b}", permissions.get_bits())
-            }))));
-        },
+            let invite_token = match get_or_create_event_token(&state.db_pool, event_id).await {
+                Ok(token) => token,
+                Err(e) => {
+                    tracing::error!("Failed to get/create token: {}", e);
+                    return Err(AppError::Internal("Failed to create invite token".to_string()));
+                }
+            };
+            
+            let is_valid = is_event_token_valid(&state.db_pool, &invite_token).await?;
+            
+            let final_token = if !is_valid {
+                match create_event_token(&state.db_pool, event_id, 300).await {
+                    Ok(token) => token,
+                    Err(e) => {
+                        tracing::error!("Failed to create new token: {}", e);
+                        return Err(AppError::Internal("Failed to create invite token".to_string()));
+                    }
+                }
+            } else {
+                invite_token
+            };
+            
+            let invite_link = format!("https://kruug.netlify.app/invite?token={}", final_token);
+            
+            Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
+                event,
+                invite_link: Some(invite_link),
+                members,
+                permissions: format!("{:b}", permissions.get_bits())
+            }))))
+        }
         Ok(false) => {
-            return Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
-                    event: event, 
-                    invite_link: None, 
-                    members: members,
-                    permissions: format!("{:b}", permissions.get_bits())
-            }))));
-        },
-        Err(_) => return Err(AppError::Internal("Error check user permissions".to_string())),
-    };
+            Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
+                event,
+                invite_link: None,
+                members,
+                permissions: format!("{:b}", permissions.get_bits())
+            }))))
+        }
+        Err(e) => {
+            tracing::error!("Error checking user permissions: {:?}", e);
+            Err(AppError::Internal("Error check user permissions".to_string()))
+        }
+    }
 }
 
 #[utoipa::path(
@@ -287,7 +312,7 @@ pub async fn delete_event_handler(
 
 #[utoipa::path(
     get,
-    path = "/events/{event_id}/planning",
+    path = "/events/:event_id/planning",
     tag = "Event",
     security(
         ("bearerAuth" = [])
@@ -446,7 +471,6 @@ pub async fn get_modules_handler(
     security(
         ("bearerAuth" = [])
     ),
-    request_body = GetEventRequest,
     responses(
         (status = 204, description = "User deleted from event", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),

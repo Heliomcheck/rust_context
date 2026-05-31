@@ -66,7 +66,7 @@ pub async fn create_poll_handler(
         Err(e) => return Err(e),
     };
 
-    let poll_id = create_poll(
+    let _ = create_poll(
         &state.db_pool,
         event_id,
         payload.title,
@@ -75,14 +75,14 @@ pub async fn create_poll_handler(
         payload.multiple_choice
     ).await?;
 
-    let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
+    // let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
 
-    Ok((StatusCode::CREATED, Json(json!({"success": true }))))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     put,
-    path = "/events/{event_id}/planning/poll/{poll_id}",
+    path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -122,12 +122,12 @@ pub async fn update_poll_handler(
     if !updated {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok((StatusCode::OK, Json(json!({"success": true}))))
 }
 
 #[utoipa::path(
     delete,
-    path = "/events/{event_id}/planning/poll/{poll_id}",
+    path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -169,8 +169,8 @@ pub async fn delete_poll_handler(
 }
 
 #[utoipa::path(
-    post,
-    path = "/events/{event_id}/planning/poll/{poll_id}/vote",
+    patch,
+    path = "/events/{event_id}/planning/poll/{module_id}/vote",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
