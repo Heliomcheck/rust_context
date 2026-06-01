@@ -149,12 +149,6 @@ pub struct EventPaths {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct EventModulesPaths {
-    pub event_id: i64,
-    pub module_id: i64
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventDetailedResponse {
     pub event: Events,
     pub invite_link: Option<String>,

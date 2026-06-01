@@ -405,64 +405,6 @@ pub async fn get_modules_handler(
     
     Ok(Json(PlanningModulesResponse { modules }))
 }
-// pub async fn get_event_modules_handler(
-
-//     State(state): State<Arc<AppState>>,
-//     auth: TypedHeader<Authorization<Bearer>>,
-//     Json(payload): Json<InviteUserToEventRequest>,
-// ) -> Result<impl IntoResponse, AppError> {
-//     let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-//         Some(u) => u,
-//         None => return Err(AppError::UserNotFound),
-//     };
-//     let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
-//     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-//     if !is_member {
-//         return Err(AppError::UserNotInEvent("User not in event".to_string()));
-//     }
-
-//     let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::INVITE).await {
-//         Ok(true) => true,
-//         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
-//         Err(e) => return Err(e),
-//     };
-//     let modules = get_event_modules(&state.db_pool, event.event_id).await?;
-
-//     Ok((StatusCode::OK, Json(json!({"modules": event.modules}))))
-// }
-
-// #[utoipa::path(
-//     post,
-//     path = "/events/add_user",
-//     tag = "Event",
-//     security(
-//         ("bearerAuth" = [])
-//     ),
-//     request_body = InviteUserToEventRequest,
-//     responses(
-//         (status = 204, description = "User added to event", body = SuccessResponse),
-//         (status = 400, description = "Bad request", body = ErrorResponse),
-//         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-//         (status = 404, description = "User or event not found", body = ErrorResponse),
-//         (status = 500, description = "Internal server error", body = ErrorResponse)
-//     )
-// )]
-// pub async fn add_user_to_event_handler(
-//     State(state): State<Arc<AppState>>,
-//     auth: TypedHeader<Authorization<Bearer>>,
-//     query: Query<InviteUserToEventRequest>,
-//     Path(path): Path<EventPaths>,
-// ) -> Result<impl IntoResponse, AppError> {
-//     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
-
-//     let event = get_event_by_id(&state.db_pool, path.event_id).await?;
-
-//     // check invite link in future
-//     let _ = add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
-
-//     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
-// }
 
 #[utoipa::path(
     post,
@@ -617,7 +559,7 @@ pub async fn event_join_handler(
     
     add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
     
-    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(json!({"success": true, "event": event}))))
 }
 
 #[utoipa::path(

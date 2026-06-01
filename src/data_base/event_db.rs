@@ -401,31 +401,6 @@ pub async fn has_permission(
     Ok(row)
 }
 
-// #[allow(dead_code)]
-// pub async fn create_event_token(
-//     pool: &PgPool,
-//     event_id: i64,
-//     expires_in_hours: i64,
-// ) -> Result<String, AppError> {
-//     let event_token = "test".to_string(); // Generate a unique token here (e.g., UUID or random string)
-//     let expires_at = Utc::now() + chrono::Duration::hours(expires_in_hours);
-    
-//     sqlx::query!(
-//         r#"
-//         INSERT INTO event_token (event_token, event_id, expires_at)
-//         VALUES ($1, $2, $3)
-//         "#,
-//         event_token,
-//         event_id,
-//         expires_at
-//     )
-//     .execute(pool)
-//     .await?;
-    
-//     Ok(event_token)
-// }
-
-#[allow(dead_code)]
 pub async fn get_event_id_by_token(
     pool: &PgPool,
     event_token: &str,
@@ -444,27 +419,6 @@ pub async fn get_event_id_by_token(
     Ok(row.map(|r| r.event_id))
 }
 
-#[allow(dead_code)]
-pub async fn is_user_in_event(
-    pool: &PgPool,
-    user_id: i64,
-    event_id: i64,
-) -> Result<bool, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT EXISTS (
-            SELECT 1 FROM event_user
-            WHERE user_id = $1 AND event_id = $2
-        ) as "exists!"
-        "#,
-        user_id,
-        event_id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Ok(row.exists)
-}
 
 pub async fn delete_event(
     pool: &PgPool,
@@ -579,7 +533,7 @@ pub async fn create_event_token(
     expires_in_hours: i64,
 ) -> Result<String, AppError> {
     let token = crate::secrets::generator::Generator::new_session_token(); // 32 символа
-    let expires_at = Utc::now() + Duration::hours(expires_in_hours);
+    let expires_at: DateTime<Utc> = Utc::now() + Duration::hours(expires_in_hours);
     
     sqlx::query!(
         r#"
@@ -771,7 +725,7 @@ mod tests {
             "#123456".to_string()
         ).await?;
         add_member(&pool, user_id, event_id, 10,).await?;
-        let exists = is_user_in_event(&pool, user_id, event_id).await?;
+        let exists = check_user_in_event(&pool, user_id, event_id).await?;
         assert!(exists);
         Ok(())
     }
@@ -797,7 +751,7 @@ mod tests {
         ).await?;
         add_member(&pool, user_id, event_id, 1,).await?;
         remove_member(&pool, user_id, event_id).await?;
-        let exists = is_user_in_event(&pool, user_id, event_id).await?;
+        let exists = check_user_in_event(&pool, user_id, event_id).await?;
         assert!(!exists);
         Ok(())
     }
