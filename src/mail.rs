@@ -79,7 +79,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_mail_verif_code_cooldown_logic() {
-
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -87,17 +86,21 @@ mod tests {
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool
         });
-        // first request creates code
+
+        // первый запрос создаёт код
         {
             let mut store = state.verification_store.lock().await;
             let code = store.create("test@example.com", 15);
             assert_eq!(code.len(), 6);
             assert!(code.chars().all(|c| c.is_ascii_digit()));
         }
-        // second immediate request should fail cooldown
+
+        // немедленный повтор должен вернуть false из-за кулдауна
         {
             let store = state.verification_store.lock().await;
             assert!(!store.can_resend("test@example.com", 30));
         }
     }
+
+    // Для настоящей отправки нужен mock SMTP сервера; здесь можно протестировать только логику кулдауна.
 }

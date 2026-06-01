@@ -43,3 +43,35 @@ impl IntoResponse for AppError {
         (status, Json(json!({ "error": msg }))).into_response()
     }
 }
+//TEST
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+    use http_body_util::BodyExt;
+
+    #[tokio::test]
+    async fn test_all_error_responses() {
+        let test_cases = vec![
+            (AppError::EventNotFound, StatusCode::NOT_FOUND, "Event not found"),
+            (AppError::Conflict, StatusCode::CONFLICT, "Already exists"),
+            (AppError::InvalidToken, StatusCode::UNAUTHORIZED, "Invalid token"),
+            (AppError::DbError(sqlx::Error::WorkerCrashed), StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
+            (AppError::Internal("custom".into()), StatusCode::INTERNAL_SERVER_ERROR, "custom"),
+            (AppError::BadRequest("bad".into()), StatusCode::BAD_REQUEST, "bad"),
+            (AppError::UserNotInEvent("no".into()), StatusCode::FORBIDDEN, "no"),
+            (AppError::NotFound("missing".into()), StatusCode::NOT_FOUND, "missing"),
+            (AppError::Unauthorized, StatusCode::UNAUTHORIZED, "Unauthorized"),
+            (AppError::Forbidden("denied".into()), StatusCode::FORBIDDEN, "denied"),
+        ];
+
+        for (error, expected_status, expected_message) in test_cases {
+            let response = error.into_response();
+            assert_eq!(response.status(), expected_status, "Status mismatch for {:?}", expected_status);
+            let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+            assert_eq!(body["error"].as_str().unwrap(), expected_message);
+        }
+    }
+}

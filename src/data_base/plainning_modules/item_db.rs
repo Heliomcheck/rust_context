@@ -345,3 +345,101 @@ pub async fn get_event_item_lists(
     
     Ok(result)
 }
+
+//test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::setup_test_db;
+    use crate::data_base::user_db::create_user_db;
+    use crate::data_base::event_db::{create_event, add_member};
+    use crate::permissions::EventPermissions;
+
+    #[tokio::test]
+    async fn test_create_and_get_item_list() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "itemdbuser", "itemdb@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item1".to_string(), "item2".to_string()], user_id).await?;
+        assert_eq!(list.items.len(), 2);
+
+        let fetched = get_item_list(&pool, list.item_list_id).await?.expect("should exist");
+        assert_eq!(fetched.title, "List");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_assign_and_unassign_item() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "assigner", "assigner@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item".to_string()], user_id).await?;
+        let item_id = list.items[0].item_id;
+
+        assign_item(&pool, item_id, user_id, true).await?;
+        let list = get_item_list(&pool, list.item_list_id).await?.unwrap();
+        assert_eq!(list.items[0].assigned_user_id, Some(user_id));
+
+        assign_item(&pool, item_id, user_id, false).await?;
+        let list = get_item_list(&pool, list.item_list_id).await?.unwrap();
+        assert_eq!(list.items[0].assigned_user_id, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_assign_item_already_assigned() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user1 = create_user_db(&pool, "user1", "user1@mail.com", "U1", &None, &None).await?;
+        let user2 = create_user_db(&pool, "user2", "user2@mail.com", "U2", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user1, event_id, EventPermissions::OWNER).await?;
+        add_member(&pool, user2, event_id, EventPermissions::MEMBER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item".to_string()], user1).await?;
+        let item_id = list.items[0].item_id;
+
+        assign_item(&pool, item_id, user1, true).await?;
+        let result = assign_item(&pool, item_id, user2, true).await;
+        assert!(result.is_err()); // уже назначено
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_item_list() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "deleter", "deleter@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item".to_string()], user_id).await?;
+        delete_item_list(&pool, list.item_list_id, event_id).await?;
+        let result = get_item_list(&pool, list.item_list_id).await?;
+        assert!(result.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_item_list_add_and_remove() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "updater", "updater@mail.com", "User", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item1".to_string()], user_id).await?;
+        let item_to_remove = list.items[0].item_id;
+
+        let updated = update_item_list(
+            &pool,
+            list.item_list_id,
+            &["item2".to_string()],
+            &[item_to_remove],
+        ).await?;
+        assert_eq!(updated.items.len(), 1);
+        assert_eq!(updated.items[0].item_text, "item2");
+        Ok(())
+    }
+}

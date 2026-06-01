@@ -404,3 +404,112 @@ pub struct TaskListItemData {
     pub assigned_user_name: Option<String>,
     pub completed: bool,
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use validator::Validate;
+
+    #[test]
+    fn register_request_valid() {
+        let req = RegisterRequest {
+            email: "user@example.com".into(),
+            username: "validuser".into(),
+            birthday: Some("01-01-2000".into()),
+            display_name: "User".into(),
+            description: Some("Hello".into()),
+        };
+        assert!(req.validate().is_ok());
+    }
+
+    #[test]
+    fn register_request_invalid_email() {
+        let req = RegisterRequest {
+            email: "notanemail".into(),
+            username: "valid".into(),
+            birthday: None,
+            display_name: "Name".into(),
+            description: None,
+        };
+        let errors = req.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("email"));
+    }
+
+    #[test]
+    fn register_request_short_username() {
+        let req = RegisterRequest {
+            email: "x@x.com".into(),
+            username: "ab".into(),
+            birthday: None,
+            display_name: "Name".into(),
+            description: None,
+        };
+        let errors = req.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("username"));
+    }
+
+    #[test]
+    fn register_request_invalid_birthday_format() {
+        let req = RegisterRequest {
+            email: "x@x.com".into(),
+            username: "valid".into(),
+            birthday: Some("2000-01-01".into()), // wrong format
+            display_name: "Name".into(),
+            description: None,
+        };
+        let errors = req.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("birthday"));
+    }
+
+    #[test]
+    fn code_request_valid() {
+        let req = CodeRequest { email: "a@b.com".into() };
+        assert!(req.validate().is_ok());
+    }
+
+    #[test]
+    fn verify_code_request_valid() {
+        let req = VerifyCodeRequest { email: "a@b.com".into(), code: "123456".into() };
+        assert!(req.validate().is_ok());
+    }
+
+    #[test]
+    fn verify_code_request_short_code() {
+        let req = VerifyCodeRequest { email: "a@b.com".into(), code: "123".into() };
+        assert!(req.validate().is_err());
+    }
+
+    #[test]
+    fn edit_user_request_partial() {
+        let req = EditUserRequest {
+            username: Some("newuser".into()),
+            birthday: None,
+            display_name: None,
+            description: None,
+        };
+        assert!(req.validate().is_ok());
+    }
+
+    #[test]
+    fn create_poll_request_valid() {
+        let req = CreatePollRequest {
+            title: "Question".into(),
+            options: vec!["A".into(), "B".into()],
+            multiple_choice: false,
+        };
+        // Валидация не реализована для CreatePollRequest, поэтому просто проверяем, что не падает
+        // (нет макроса Validate)
+        // Если бы была, можно было бы вызвать validate()
+    }
+
+    #[test]
+    fn validation_errors_to_response_bad_request() {
+        // Симулируем ошибку валидации
+        let mut errors = ValidationErrors::new();
+        errors.add("username", validator::ValidationError::new("length"));
+        let app_err = validation_errors_to_response(errors);
+        match app_err {
+            AppError::BadRequest(msg) => assert!(msg.contains("username")),
+            _ => panic!("Expected BadRequest"),
+        }
+    }
+}

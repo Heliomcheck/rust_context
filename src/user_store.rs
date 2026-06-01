@@ -77,88 +77,16 @@ impl UserStore {
         Ok(user_id)
     }
 
-
+//test
     #[cfg(test)]
-    pub async fn get_user_by_id(
-        &mut self,
-        pool: &PgPool,
-        user_id: i64,
-    ) -> Result<Option<User>, anyhow::Error> {
-        // 1. Проверяем кэш
-        if let Some(user) = self.users.get(&user_id) {
-            return Ok(Some(user.clone()));
-        }
-
-        // 2. Ищем в БД
-        let user_opt = find_user_by_id(pool, user_id).await?;
-
-        // 3. Если нашли – добавляем в кэш
-        if let Some(ref user) = user_opt {
-            self.users.insert(user_id, user.clone());
-            self.users_by_email.insert(user.email.clone(), user_id);
-            self.users_by_username.insert(user.username.clone(), user_id);
-        }
-
-        Ok(user_opt)
-    }
-
-    #[cfg(test)]
-    pub async fn get_user_by_email(
-        &mut self,
-        pool: &PgPool,
-        email: &str,
-    ) -> Result<Option<User>, anyhow::Error> {
-        if let Some(user) = self.users_by_email.get(email).and_then(|id| self.users.get(id)) {
-            return Ok(Some(user.clone()));
-        }
-
-        let user_opt = find_user_by_email(pool, email).await?;
-
-        if let Some(ref user) = user_opt {
-            self.users.insert(user.user_id, user.clone());
-            self.users_by_email.insert(user.email.clone(), user.user_id);
-            self.users_by_username.insert(user.username.clone(), user.user_id);
-        }
-
-        Ok(user_opt)
-    }
-
-    #[cfg(test)]
-    pub async fn get_user_by_username(
-        &mut self,
-        pool: &PgPool,
-        username: &str,
-    ) -> Result<Option<User>, anyhow::Error> {
-        if let Some(user) = self.users_by_username.get(username).and_then(|id| self.users.get(id)) {
-            return Ok(Some(user.clone()));
-        }
-
-        let user_opt = find_user_by_username(pool, username).await?;
-
-        if let Some(ref user) = user_opt {
-            self.users.insert(user.user_id, user.clone());
-            self.users_by_email.insert(user.email.clone(), user.user_id);
-            self.users_by_username.insert(user.username.clone(), user.user_id);
-        }
-
-        Ok(user_opt)
-    }
-
-    #[cfg(test)]
-    pub fn check_username(&self, username: &str) -> bool { // refactor
-        self.users_by_username.contains_key(username)
-    }
-}
-#[cfg(test)]
 mod tests {
     use anyhow::Ok;
     use crate::UserStore;
-
     use crate::data_base::user_db::*;
     use crate::test_utils::*;
-    // Tests 
+
     #[test]
-    fn test_new(){
+    fn test_new() {
         let store = UserStore::new();
         assert!(store.users.is_empty());
         assert!(store.users_by_email.is_empty());
@@ -169,7 +97,7 @@ mod tests {
     async fn test_add_user() -> anyhow::Result<()> {
         let mut store = UserStore::new();
         let pool = setup_test_db().await;
-        let user_id = store.add_user(
+        let result = store.add_user(
             10,
             "test".to_string(),
             "test@example.com".to_string(),
@@ -177,9 +105,8 @@ mod tests {
             "Test User".to_string(),
             None,
             &pool
-        );
-        assert!(user_id.await.is_ok());
-
+        ).await;
+        assert!(result.is_ok());
         Ok(())
     }
 
@@ -187,16 +114,16 @@ mod tests {
     async fn test_get_user_by_email() -> anyhow::Result<()> {
         let mut store = UserStore::new();
         let pool = setup_test_db().await;
-        let _ = store.add_user(
+        store.add_user(
             10,
             "test".to_string(),
             "test@example.com".to_string(),
-            None, 
+            None,
             "Test User".to_string(),
             None,
             &pool
         ).await?;
-        let user = store.get_user_by_email(&pool,"test@example.com").await?;
+        let user = store.get_user_by_email(&pool, "test@example.com").await?;
         assert!(user.is_some());
         Ok(())
     }
@@ -223,7 +150,7 @@ mod tests {
     async fn test_get_user_by_username() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let mut store = UserStore::new();
-        let _ = store.add_user(
+        store.add_user(
             10,
             "test".to_string(),
             "test@example.com".to_string(),
@@ -237,7 +164,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]async fn test_load_from_db() -> anyhow::Result<()> {
+    #[tokio::test]
+    async fn test_load_from_db() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -246,8 +174,7 @@ mod tests {
             "DB User",
             &None,
             &None,
-        )
-        .await?;
+        ).await?;
 
         let mut store = UserStore::new();
         store.load_from_db(&pool).await?;
@@ -255,20 +182,19 @@ mod tests {
         let user = store.get_user_by_id(&pool, user_id).await?;
         assert!(user.is_some());
         assert_eq!(user.unwrap().user_id, user_id);
-
         Ok(())
     }
 
-    #[tokio::test]async fn test_check_username_taken() -> anyhow::Result<()> { //s imenem
+    #[tokio::test]
+    async fn test_check_username_taken() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-
         let mut store = UserStore::new();
-        store.add_user(//With your feet in the air and your head on the ground
+        store.add_user(
             10,
-            "test".to_string(),//Try this trick and spin it, yeah
-            "test@mail.ru".to_string(),//Your head will collapse
-            None,//But there's nothing in it
-            "Tets name".to_string(),//And you'll ask yourself
+            "test".to_string(),
+            "test@mail.ru".to_string(),
+            None,
+            "Tets name".to_string(),
             None,
             &pool
         ).await?;
@@ -276,24 +202,24 @@ mod tests {
         assert!(exists);
         Ok(())
     }
+
     #[tokio::test]
-    async fn test_check_username_untaken() -> anyhow::Result<()> { //bez imeni
+    async fn test_check_username_untaken() {
         let store = UserStore::new();
         let exists = store.check_username("newhui");
         assert!(!exists);
-        Ok(())
     }
+
     #[tokio::test]
-    async fn test_check_username_empty() -> anyhow::Result<()> { //pusto
+    async fn test_check_username_empty() {
         let store = UserStore::new();
         let exists = store.check_username("");
         assert!(!exists);
-        Ok(())
     }
-    #[tokio::test]
-    async fn test_check_username_spaces() -> anyhow::Result<()> { //probelli ebanya rot
-        let pool = setup_test_db().await;
 
+    #[tokio::test]
+    async fn test_check_username_spaces() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
         let mut store = UserStore::new();
         store.add_user(
             10,
@@ -308,10 +234,10 @@ mod tests {
         assert!(exists);
         Ok(())
     }
-    #[tokio::test]
-    async fn test_check_username_register() -> anyhow::Result<()> { //register (T != t)
-        let pool = setup_test_db().await;
 
+    #[tokio::test]
+    async fn test_check_username_register() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
         let mut store = UserStore::new();
         store.add_user(
             10,
@@ -326,10 +252,10 @@ mod tests {
         assert!(!exists);
         Ok(())
     }
-    #[tokio::test]
-    async fn test_check_username_long() -> anyhow::Result<()> { //dlinno nemnozhko
-        let pool = setup_test_db().await;
 
+    #[tokio::test]
+    async fn test_check_username_long() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
         let mut store = UserStore::new();
         let long_username = "sigmaboy".repeat(1000);
         store.add_user(
@@ -347,9 +273,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_username_special_chars() -> anyhow::Result<()> { //special simvoll's
+    async fn test_check_username_special_chars() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-
         let mut store = UserStore::new();
         let username = "sigmaboy_123!@#";
         store.add_user(
@@ -367,9 +292,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_username_unicode() -> anyhow::Result<()> { //Unicode test na niziu (libo mozhno ebnut' test po ip chtob ne vtikali)
+    async fn test_check_username_unicode() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-
         let mut store = UserStore::new();
         let username = "Валерыч";
         store.add_user(

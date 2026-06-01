@@ -135,61 +135,57 @@ pub async fn update_user_permissions(
     Ok(())
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::data_base::{event_db, user_db};
-//     use crate::test_utils::setup_test_db;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data_base::{event_db, user_db};
+    use crate::test_utils::setup_test_db;
 
+    #[test]
+    fn test_event_permissions_basic_operations() {
+        let mut permissions: EventPermissions = EventPermissions::full();
+        assert!(permissions.check_permission(EventPermissions::OWNER));
+        assert!(!permissions.check_permission(EventPermissions::ADMIN));
 
-//     #[test]
-//     fn test_event_permissions_basic_operations() {
-//         let mut permissions: EventPermissions = EventPermissions::full();
-//         assert!(permissions.check_permission(EventPermissions::OWNER));
-//         assert!(!permissions.check_permission(EventPermissions::ADMIN));
-        
-//         // Добавляем ADMIN
-//         permissions.add_permission(EventPermissions::ADMIN);
-//         assert!(permissions.check_permission(EventPermissions::ADMIN));
-//     }
+        permissions.add_permission(EventPermissions::ADMIN);
+        assert!(permissions.check_permission(EventPermissions::ADMIN));
+    }
 
-//     #[tokio::test]
-//     async fn test_check_and_update_user_permissions_with_db() -> anyhow::Result<()> {
-//         let pool = setup_test_db().await;
+    #[tokio::test]
+    async fn test_check_and_update_user_permissions_with_db() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
 
-//         let user_id = user_db::create_user_db(
-//             &pool,
-//             "perms_user",
-//             "perms@mail.com",
-//             "Perms User",
-//             &None,
-//             &None,
-//         )
-//         .await?;
+        let user_id = user_db::create_user_db(
+            &pool,
+            "perms_user",
+            "perms@mail.com",
+            "Perms User",
+            &None,
+            &None,
+        ).await?;
 
-//         let event_id = event_db::create_event(
-//             &pool,
-//             "Perms Event",
-//             None,
-//             None,
-//             None,
-//             "#abcdef".to_string(),
-//         )
-//         .await?;
+        let event_id = event_db::create_event(
+            &pool,
+            "Perms Event",
+            None,
+            None,
+            None,
+            None,
+            "#abcdef".to_string(),
+        ).await?;
 
-//         event_db::add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
+        event_db::add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
 
-//         let event = event_db::get_event_by_id(&pool, event_id).await?;
-//         let user = user_db::find_user_by_id(&pool, user_id).await?.unwrap();
+        let event = event_db::get_event_by_id(&pool, event_id).await?;
+        let user = user_db::find_user_by_id(&pool, user_id).await?.unwrap();
 
-//         let has_owner = check_user_permissions(&pool, &event, &user, EventPermissions::OWNER)
-//             .await?;
-//         assert!(has_owner);
+        let has_owner = check_user_permissions(&pool, &event, &user, EventPermissions::OWNER).await?;
+        assert!(has_owner);
 
-//         update_user_permissions(&pool, event_id, user_id, EventPermissions::ADMIN).await?;
-//         let updated_permissions = get_user_permissions(&pool, event_id, user_id).await?;
-//         assert!(updated_permissions.check_permission(EventPermissions::ADMIN));
+        update_user_permissions(&pool, event_id, user_id, EventPermissions::ADMIN).await?;
+        let updated_permissions = get_user_permissions(&pool, event_id, user_id).await?;
+        assert!(updated_permissions.check_permission(EventPermissions::ADMIN));
 
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}
