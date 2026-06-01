@@ -332,30 +332,8 @@ pub async fn logout_handler(
     }
 }
 
+//test
 #[cfg(test)]
-mod tests {
-    use chrono::Utc;
-    use axum::{Router, routing};
-    
-    use tokio::sync::Mutex;
-    use axum::http::StatusCode;
-    use serde_json::json;
-    use axum::body::Body;
-    use axum::http::Request;
-    use tower::util::ServiceExt;
-
-    use crate::{
-        data_base::user_db::*,
-        structs::*,
-        user_store::*,
-        secrets::verification::VerificationStore,
-        *
-    };
-
-    use crate::test_utils::*;
-
-    //test
-    #[cfg(test)]
 mod tests {
     use chrono::Utc;
     use axum::{Router, routing};

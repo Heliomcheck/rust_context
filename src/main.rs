@@ -111,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}", routing::delete(delete_event_handler))
         
         .route("/events", routing::get(get_user_events_handler)) // query required // status = ""/limit = 10/offset = 10
-        .route("/events/{event_id}/join", routing::post(event_join_handler))
+        .route("/events/join", routing::post(event_join_handler))
         .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
         .route("/events/{event_id}/members/{user_id}", routing::put(update_user_permissions_handler))
 

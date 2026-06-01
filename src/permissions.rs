@@ -58,8 +58,7 @@ impl EventPermissions {
         (self.bits & permission) != 0
     }
 
-    #[allow(dead_code)]
-    pub fn add_permission(mut self, permission: i32) -> Self {
+    pub fn add_permission(&mut self, permission: i32) -> &mut Self{
         self.bits |= permission;
         self
     }

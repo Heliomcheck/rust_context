@@ -262,11 +262,20 @@ pub async fn delete_task_list_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{Router, body::Body, http::Request};
+    use axum::{
+        Router, 
+        body::Body, 
+        http::Request
+    };
     use tower::ServiceExt;
     use std::sync::Arc;
-    use tokio::sync::{Mutex, broadcast};
+    use tokio::sync::{
+        Mutex, 
+        broadcast
+    };
     use serde_json::json;
+    use http_body_util::BodyExt;
+    use chrono::Utc;
 
     use crate::{
         test_utils::setup_test_db,
@@ -274,8 +283,14 @@ mod tests {
         user_store::UserStore,
         secrets::verification::VerificationStore,
         data_base::{
-            user_db::{create_user_db, create_token},
-            event_db::{create_event, add_member},
+            user_db::{
+                create_user_db, 
+                create_token
+            },
+            event_db::{
+                create_event, 
+                add_member
+            },
         },
         permissions::EventPermissions,
     };
@@ -296,11 +311,11 @@ mod tests {
         });
 
         let app = Router::new()
-            .route("/events/:event_id/planning/tasks", routing::post(create_task_list_handler))
-            .route("/events/:event_id/planning/tasks/:module_id", routing::patch(update_task_list_handler))
-            .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/assign", routing::post(assign_task_handler))
-            .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/complete", routing::post(complete_task_handler))
-            .route("/events/:event_id/planning/tasks/:module_id", routing::delete(delete_task_list_handler))
+            .route("/events/{event_id}/planning/tasks", routing::post(create_task_list_handler))
+            .route("/events/{event_id}/planning/tasks/{module_id}", routing::patch(update_task_list_handler))
+            .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign", routing::post(assign_task_handler))
+            .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete", routing::post(complete_task_handler))
+            .route("/events/{event_id}/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
             .with_state(state.clone());
 
         (app, state, event_id, token.to_string(), user_id)
@@ -466,7 +481,7 @@ mod tests {
             db_pool: pool,
         });
         let app = Router::new()
-            .route("/events/:event_id/planning/tasks/:module_id", routing::delete(delete_task_list_handler))
+            .route("/events/:event_id/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
             .with_state(state.clone());
 
         // создаём task list от owner

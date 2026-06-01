@@ -413,10 +413,10 @@ mod tests {
     // ----------------- update_user_data -----------------
     #[tokio::test]
     async fn update_user_data_success() -> anyhow::Result<()> {
-        let pool = setup_test_db().await;
-        let (uid, token) = new_user_and_token(&pool).await;
-        let state = create_state(pool).await;
-        let app = user_app(state);
+        let db_pool = setup_test_db().await;
+        let (uid, token) = new_user_and_token(&db_pool).await;
+        let state = create_state(db_pool).await;
+        let app = user_app(state.clone());
 
         let payload = json!({"username": "new_name", "display_name": "New Display"});
         let req = Request::builder()

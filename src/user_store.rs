@@ -77,6 +77,43 @@ impl UserStore {
         Ok(user_id)
     }
 
+    #[allow(dead_code)]
+    pub fn get_user_by_id(&self, id: i64) -> Option<&User> {
+        self.users.get(&id)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_user_by_email(&self, email: &str) -> Option<&User> {
+        self.users_by_email.get(email).and_then(|id| self.users.get(id))
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_user_by_username(
+        &mut self,
+        pool: &PgPool,
+        username: &str,
+    ) -> Result<Option<User>, anyhow::Error> {
+        if let Some(user) = self.users_by_username.get(username).and_then(|id| self.users.get(id)) {
+            return Ok(Some(user.clone()));
+        }
+
+        let user_opt = find_user_by_username(pool, username).await?;
+
+        if let Some(ref user) = user_opt {
+            self.users.insert(user.user_id, user.clone());
+            self.users_by_email.insert(user.email.clone(), user.user_id);
+            self.users_by_username.insert(user.username.clone(), user.user_id);
+        }
+
+        Ok(user_opt)
+    }
+
+    #[allow(dead_code)]
+    pub fn check_username(&self, username: &str) -> bool { // refactor
+        self.users_by_username.contains_key(username)
+    }
+}
+
 //test
     #[cfg(test)]
 mod tests {
@@ -123,7 +160,7 @@ mod tests {
             None,
             &pool
         ).await?;
-        let user = store.get_user_by_email(&pool, "test@example.com").await?;
+        let user = store.get_user_by_email("test@example.com");
         assert!(user.is_some());
         Ok(())
     }
@@ -141,7 +178,7 @@ mod tests {
             None,
             &pool
         ).await?;
-        let user = store.get_user_by_id(&pool, user_id).await?;
+        let user = store.get_user_by_id(user_id);
         assert!(user.is_some());
         Ok(())
     }
@@ -179,7 +216,7 @@ mod tests {
         let mut store = UserStore::new();
         store.load_from_db(&pool).await?;
 
-        let user = store.get_user_by_id(&pool, user_id).await?;
+        let user = store.get_user_by_id(user_id);
         assert!(user.is_some());
         assert_eq!(user.unwrap().user_id, user_id);
         Ok(())

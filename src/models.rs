@@ -186,7 +186,6 @@ pub struct UpdateEventRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct JoinEventRequest {
-    pub event_id: i64,
     pub invite_token: String,
 }
 
@@ -491,7 +490,7 @@ mod tests {
 
     #[test]
     fn create_poll_request_valid() {
-        let req = CreatePollRequest {
+        let _ = CreatePollRequest {
             title: "Question".into(),
             options: vec!["A".into(), "B".into()],
             multiple_choice: false,
