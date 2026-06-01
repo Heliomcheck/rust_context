@@ -110,11 +110,10 @@ const UPLOAD_DIR: &str = "uploads/avatars";
     post,
     path = "/user/avatar",
     tag = "User",
-    request_body = Multipart,
-    //request_body(
-        //content_type = "multipart/form-data",
-        //description = "Avatar file to upload",
-    //),
+    request_body(
+        content_type = "multipart/form-data",
+        description = "Avatar file to upload",
+    ),
     security(
         ("bearerAuth" = [])
     ),
@@ -125,8 +124,6 @@ const UPLOAD_DIR: &str = "uploads/avatars";
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
-
-
 pub async fn upload_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,

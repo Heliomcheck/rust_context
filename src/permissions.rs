@@ -1,11 +1,12 @@
 use serde::Serialize;
 use sqlx::PgPool;
+use utoipa::{ToSchema};
 use crate::{
     errors::AppError,
     structs::*
 };
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct EventPermissions {
     bits: i32
 }

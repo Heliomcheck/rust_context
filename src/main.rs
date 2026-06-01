@@ -102,40 +102,40 @@ async fn main() -> Result<(), anyhow::Error> {
         //.route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
         
-        .route("/avatars/:file_name", routing::get(get_avatar_handler))
+        .route("/avatars/{file_name}", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
-        .route("/events/:event_id", routing::get(get_detailed_event_handler))
-        .route("/events/:event_id", routing::put(update_event_handler))
-        .route("/events/:event_id/status", routing::patch(update_event_status_handler))
-        .route("/events/:event_id", routing::delete(delete_event_handler))
+        .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+        .route("/events/{event_id}", routing::put(update_event_handler))
+        .route("/events/{event_id}/status", routing::patch(update_event_status_handler))
+        .route("/events/{event_id}", routing::delete(delete_event_handler))
         
         .route("/events", routing::get(get_user_events_handler)) // query required // status = ""/limit = 10/offset = 10
-        .route("/events/:event_id/join", routing::post(event_join_handler))
-        .route("/events/:event_id/members/{user_id}", routing::post(delete_user_from_event_handler))
-        .route("/events/:event_id/members/{user_id}", routing::put(update_user_permissions_handler))
+        .route("/events/{event_id}/join", routing::post(event_join_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::put(update_user_permissions_handler))
 
-        .route("/events/:event_id/avatar", routing::post(upload_event_avatar_handler))
-        .route("/event-avatars/:event_id", routing::get(get_event_avatar_handler))
-        .route("/events/:event_id/avatar", routing::delete(delete_event_avatar_handler))
+        .route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler))
+        .route("/event-avatars/{event_id}", routing::get(get_event_avatar_handler))
+        .route("/events/{event_id}/avatar", routing::delete(delete_event_avatar_handler))
         
-        .route("/events/:event_id/planning", routing::get(get_modules_handler))
+        .route("/events/{event_id}/planning", routing::get(get_modules_handler))
 
-        .route("/events/:event_id/planning/poll", routing::post(create_poll_handler))
-        .route("/events/:event_id/planning/poll/:poll_id", routing::post(vote_poll_handler))
-        .route("/events/:event_id/planning/poll/:poll_id", routing::delete(delete_poll_handler))
-        .route("/events/:event_id/planning/poll/:poll_id", routing::put(update_poll_handler))
+        .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
+        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::post(vote_poll_handler))
+        .route("/events/{event_id}/planning/poll/{module_id}", routing::delete(delete_poll_handler))
+        .route("/events/{event_id}/planning/poll/{module_id}", routing::put(update_poll_handler))
 
-        .route("/events/:event_id/planning/items", routing::post(create_item_list_handler))
-        .route("/events/:event_id/planning/items/:module_id", routing::patch(update_item_list_handler))
-        .route("/events/:event_id/planning/items/:module_id/items/:item_id/assign", routing::post(assign_item_handler))
-        .route("/events/:event_id/planning/items/:module_id", routing::delete(delete_item_list_handler))
+        .route("/events/{event_id}/planning/item_list", routing::post(create_item_list_handler))
+        .route("/events/{event_id}/planning/item_list/{module_id}", routing::patch(update_item_list_handler))
+        .route("/events/{event_id}/planning/item_list/{module_id}/items/{item_list_id}/assign", routing::post(assign_item_handler))
+        .route("/events/{event_id}/planning/item_list/{module_id}", routing::delete(delete_item_list_handler))
 
-        .route("/events/:event_id/planning/tasks", routing::post(create_task_list_handler))
-        .route("/events/:event_id/planning/tasks/:module_id", routing::patch(update_task_list_handler))
-        .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/assign", routing::post(assign_task_handler))
-        .route("/events/:event_id/planning/tasks/:module_id/items/:task_id/complete", routing::post(complete_task_handler))
-        .route("/events/:event_id/planning/tasks/:module_id", routing::delete(delete_task_list_handler))
+        .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}", routing::patch(update_task_list_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/assign", routing::post(assign_task_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/complete", routing::post(complete_task_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
 
         .with_state(state);
     
@@ -151,7 +151,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-#[axum_macros::debug_handler]
+
 #[allow(dead_code)]
 async fn websocket_handler(
     ws: WebSocketUpgrade,

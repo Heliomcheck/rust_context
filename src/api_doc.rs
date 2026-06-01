@@ -38,12 +38,6 @@ use crate::{
         //(name = "Chat", description = "WebSocket chat")
     ),
     paths(
-        create_event_handler,
-        get_user_events_handler,
-        get_detailed_event_handler,
-        event_join_handler,
-        update_event_status_handler,
-
         request_code_handler,
         verify_code_handler,
         resend_code_handler,
@@ -56,8 +50,19 @@ use crate::{
         get_user_data_handler,
         upload_avatar_handler,
         get_avatar_handler,
+
+        create_event_handler,
+        get_detailed_event_handler,
+        update_event_handler,
+        update_event_status_handler,
+        delete_event_handler,
+
+        get_user_events_handler,
+        event_join_handler,
         delete_user_from_event_handler,
         update_user_permissions_handler,
+
+        get_modules_handler,
 
         create_poll_handler,
         update_poll_handler,
@@ -74,10 +79,6 @@ use crate::{
         assign_task_handler,
         complete_task_handler,
         delete_task_list_handler,
-        // create_item_handler,
-        // update_item_handler,
-        // create_task_handler,
-        // update_task_handler,
 
         health_handler,
     ),

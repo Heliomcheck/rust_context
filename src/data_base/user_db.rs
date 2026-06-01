@@ -163,8 +163,7 @@ pub async fn create_token(
 }
 
 pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, sqlx::Error> {
-    let user = sqlx::query_as!(
-        User,
+    let user = sqlx::query_as::<_, User>(
         r#"
         SELECT u.user_id, u.username, u.email, u.display_name, u.birthday,
                u.is_deleted, u.created_at, u.last_online_at, description_profile
@@ -175,8 +174,8 @@ pub async fn validate_token(pool: &PgPool, token: &str) -> Result<bool, sqlx::Er
           AND t.expires_at > NOW()
           AND u.is_deleted = false
         "#,
-        token
     )
+    .bind(token)
     .fetch_optional(pool)
     .await?;
 
@@ -295,8 +294,7 @@ pub async fn update_user_avatar(
 }
 
 pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { // non tested
-    let users = sqlx::query_as!(
-        User,
+    let users = sqlx::query_as::<_, User>(
         r#"
         SELECT user_id, username, email, display_name, birthday,
                is_deleted, created_at, last_online_at, description_profile

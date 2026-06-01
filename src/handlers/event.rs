@@ -175,27 +175,52 @@ pub async fn get_detailed_event_handler(
 
     let permissions = get_user_permissions(&state.db_pool, event.event_id, user.user_id).await?;
 
-    let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
+    match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {
-            let invite_token = create_event_token(&state.db_pool, event_id, 144).await?;
-            let invite_link = format!("https://kruug.netlify.app/invite?token={}", invite_token);
-            return Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
-                    event: event, 
-                    invite_link: Some(invite_link), 
-                    members: members,
-                    permissions: format!("{:b}", permissions.get_bits())
-            }))));
-        },
+            let invite_token = match get_or_create_event_token(&state.db_pool, event_id).await {
+                Ok(token) => token,
+                Err(e) => {
+                    tracing::error!("Failed to get/create token: {}", e);
+                    return Err(AppError::Internal("Failed to create invite token".to_string()));
+                }
+            };
+            
+            let is_valid = is_event_token_valid(&state.db_pool, &invite_token).await?;
+            
+            let final_token = if !is_valid {
+                match create_event_token(&state.db_pool, event_id, 300).await {
+                    Ok(token) => token,
+                    Err(e) => {
+                        tracing::error!("Failed to create new token: {}", e);
+                        return Err(AppError::Internal("Failed to create invite token".to_string()));
+                    }
+                }
+            } else {
+                invite_token
+            };
+            
+            let invite_link = format!("https://kruug.netlify.app/invite?token={}", final_token);
+            
+            Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
+                event,
+                invite_link: Some(invite_link),
+                members,
+                permissions: format!("{:b}", permissions.get_bits())
+            }))))
+        }
         Ok(false) => {
-            return Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
-                    event: event, 
-                    invite_link: None, 
-                    members: members,
-                    permissions: format!("{:b}", permissions.get_bits())
-            }))));
-        },
-        Err(_) => return Err(AppError::Internal("Error check user permissions".to_string())),
-    };
+            Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
+                event,
+                invite_link: None,
+                members,
+                permissions: format!("{:b}", permissions.get_bits())
+            }))))
+        }
+        Err(e) => {
+            tracing::error!("Error checking user permissions: {:?}", e);
+            Err(AppError::Internal("Error check user permissions".to_string()))
+        }
+    }
 }
 
 #[utoipa::path(
@@ -282,12 +307,12 @@ pub async fn delete_event_handler(
     
     delete_event(&state.db_pool, event_id).await?;
     
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     get,
-    path = "/events/{event_id}/planning",
+    path = "/events/:event_id/planning",
     tag = "Event",
     security(
         ("bearerAuth" = [])
@@ -380,64 +405,6 @@ pub async fn get_modules_handler(
     
     Ok(Json(PlanningModulesResponse { modules }))
 }
-// pub async fn get_event_modules_handler(
-
-//     State(state): State<Arc<AppState>>,
-//     auth: TypedHeader<Authorization<Bearer>>,
-//     Json(payload): Json<InviteUserToEventRequest>,
-// ) -> Result<impl IntoResponse, AppError> {
-//     let user = match find_user_by_token(&state.db_pool, auth.token()).await? {
-//         Some(u) => u,
-//         None => return Err(AppError::UserNotFound),
-//     };
-//     let event = get_event_by_id(&state.db_pool, payload.event_id).await?;
-
-//     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-//     if !is_member {
-//         return Err(AppError::UserNotInEvent("User not in event".to_string()));
-//     }
-
-//     let _ = match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::INVITE).await {
-//         Ok(true) => true,
-//         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to invite".to_string())),
-//         Err(e) => return Err(e),
-//     };
-//     let modules = get_event_modules(&state.db_pool, event.event_id).await?;
-
-//     Ok((StatusCode::OK, Json(json!({"modules": event.modules}))))
-// }
-
-// #[utoipa::path(
-//     post,
-//     path = "/events/add_user",
-//     tag = "Event",
-//     security(
-//         ("bearerAuth" = [])
-//     ),
-//     request_body = InviteUserToEventRequest,
-//     responses(
-//         (status = 204, description = "User added to event", body = SuccessResponse),
-//         (status = 400, description = "Bad request", body = ErrorResponse),
-//         (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-//         (status = 404, description = "User or event not found", body = ErrorResponse),
-//         (status = 500, description = "Internal server error", body = ErrorResponse)
-//     )
-// )]
-// pub async fn add_user_to_event_handler(
-//     State(state): State<Arc<AppState>>,
-//     auth: TypedHeader<Authorization<Bearer>>,
-//     query: Query<InviteUserToEventRequest>,
-//     Path(path): Path<EventPaths>,
-// ) -> Result<impl IntoResponse, AppError> {
-//     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
-
-//     let event = get_event_by_id(&state.db_pool, path.event_id).await?;
-
-//     // check invite link in future
-//     let _ = add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
-
-//     Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
-// }
 
 #[utoipa::path(
     post,
@@ -446,7 +413,6 @@ pub async fn get_modules_handler(
     security(
         ("bearerAuth" = [])
     ),
-    request_body = GetEventRequest,
     responses(
         (status = 204, description = "User deleted from event", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
@@ -593,7 +559,7 @@ pub async fn event_join_handler(
     
     add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
     
-    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(json!({"success": true, "event": event}))))
 }
 
 #[utoipa::path(

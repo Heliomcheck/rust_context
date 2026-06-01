@@ -76,6 +76,7 @@ pub async fn create_poll(
     Ok(poll_id)
 }
 
+#[allow(dead_code)]
 pub async fn get_poll_by_id(
     pool: &PgPool,
     poll_id: i64,

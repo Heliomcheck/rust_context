@@ -39,6 +39,17 @@ cp -r /"your path to project"/rust_context ~/rust_context
 cd ~/rust_context
 cargo install --path .
 ```
+```bash
+# For windows
+# Git, Docker desktop, PostgreSQL, Rust
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) #this one command in powershell
+[System.Environment]::SetEnvironmentVariable('OPENSSL_DIR', 'C:\Program Files\OpenSSL-Win64', 'User') #after reopen cmd
+cargo install sqlx-cli
+sqlx db drop
+sqlx db create
+sqlx migrate run
+cargo install --path
+```
 
 ## Usage:
 ```bash

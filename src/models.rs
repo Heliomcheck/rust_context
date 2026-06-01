@@ -149,12 +149,6 @@ pub struct EventPaths {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct EventModulesPaths {
-    pub event_id: i64,
-    pub module_id: i64
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventDetailedResponse {
     pub event: Events,
     pub invite_link: Option<String>,
@@ -289,7 +283,6 @@ pub struct UpdateItemsListRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignItemRequest {
-    pub item_list_id: i64,
     pub assign: bool,   // true - забронировать, false - отказаться
 }
 
@@ -324,14 +317,12 @@ pub struct UpdateTaskListRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignTaskRequest {
-    pub task_list_id: i64,
     pub task_id: i64,
     pub assign: bool,   // true - забронировать, false - отказаться
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CompleteTaskRequest {
-    pub task_list_id: i64,
     pub task_id: i64,
     pub completed: bool,
 }

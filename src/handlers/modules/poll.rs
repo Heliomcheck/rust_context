@@ -66,7 +66,7 @@ pub async fn create_poll_handler(
         Err(e) => return Err(e),
     };
 
-    let poll_id = create_poll(
+    let _ = create_poll(
         &state.db_pool,
         event_id,
         payload.title,
@@ -75,14 +75,14 @@ pub async fn create_poll_handler(
         payload.multiple_choice
     ).await?;
 
-    let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
+    // let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
 
-    Ok((StatusCode::CREATED, Json(json!({"success": true }))))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
     put,
-    path = "/events/{event_id}/planning/poll/{poll_id}",
+    path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -122,12 +122,12 @@ pub async fn update_poll_handler(
     if !updated {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok((StatusCode::OK, Json(json!({"success": true}))))
 }
 
 #[utoipa::path(
     delete,
-    path = "/events/{event_id}/planning/poll/{poll_id}",
+    path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -165,12 +165,12 @@ pub async fn delete_poll_handler(
     if !deleted {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
 }
 
 #[utoipa::path(
-    post,
-    path = "/events/{event_id}/planning/poll/{poll_id}/vote",
+    patch,
+    path = "/events/{event_id}/planning/poll/{module_id}/vote",
     tag = "Modules",
     security(
         ("bearerAuth" = [])
@@ -187,25 +187,25 @@ pub async fn delete_poll_handler(
 pub async fn vote_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    query: Query<EventModule>,
+    Path(path): Path<EventModule>,
     Json(payload): Json<VotePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
 
-    let event = get_event_by_id(&state.db_pool, query.event_id).await?;
+    let event = get_event_by_id(&state.db_pool, path.event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
 
-    match vote_on_poll(&state.db_pool, query.module_id, user.user_id, payload.option_indexes).await {
+    match vote_on_poll(&state.db_pool, path.module_id, user.user_id, payload.option_indexes).await {
         Ok(true) => {},
         Ok(false) => return Err(AppError::BadRequest("Poll or options not found".to_string())),
         Err(e) => return Err(AppError::Internal(format!("Failed to vote on poll: {}", e))),
     };
 
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
 }
 
 #[cfg(test)]
