@@ -405,46 +405,44 @@ pub struct TaskListItemData {
 }
 // Альбомы
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
-pub struct CreateAlbumRequest {
-    #[validate(length(min = 1, max = 200, message = "Title must be between 1 and 200 characters"))]
-    pub title: String,
-    #[validate(length(max = 1000))]
-    pub description: Option<String>,
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AlbumSyncRequest {
+    pub photos: Vec<ClientPhotoInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <-- добавить Deserialize
-pub struct AlbumResponse {
-    pub album_id: i64,
-    pub event_id: i64,
-    pub title: String,
-    pub description: Option<String>,
-    pub created_by: i64,
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ClientPhotoInfo {
+    pub photo_id: i64,
+    pub etag: String,
+}
+
+// Ответ сервера (только изменения)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AlbumSyncResponse {
+    pub added: Vec<PhotoSyncInfo>,
+    pub changed: Vec<PhotoSyncInfo>,
+    pub removed: Vec<i64>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PhotoSyncInfo {
+    pub photo_id: i64,
+    pub etag: String,
+    pub url: String,
+    pub mime_type: String,
+    pub file_size: i64,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
-pub struct AlbumWithPhotosResponse {
-    pub album_id: i64,
-    pub event_id: i64,
-    pub title: String,
-    pub description: Option<String>,
-    pub created_by: i64,
-    pub created_at: DateTime<Utc>,
-    pub photos: Vec<PhotoResponse>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
+// Информация о фото для списка
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PhotoResponse {
     pub photo_id: i64,
-    pub file_name: String,
-    pub original_name: Option<String>,
-    pub mime_type: Option<String>,
-    pub file_size: Option<i64>,
-    pub uploaded_by: i64,
-    pub created_at: DateTime<Utc>,
+    pub etag: String,
     pub url: String,
+    pub mime_type: String,
+    pub file_size: i64,
+    pub created_at: DateTime<Utc>,
 }
 #[cfg(test)]
 mod tests {

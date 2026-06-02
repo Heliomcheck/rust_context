@@ -227,22 +227,13 @@ mod tests {
     use chrono::Utc;
 
     use crate::{
-        test_utils::setup_test_db,
-        structs::AppState,
-        user_store::UserStore,
-        secrets::verification::VerificationStore,
-        data_base::{
-            user_db::{
-                create_user_db, 
-                create_token,
-                find_user_by_id
-            },
+        config::Config, data_base::{
             event_db::{
-                create_event, 
-                add_member
-            },
-        },
-        permissions::EventPermissions,
+                add_member, create_event
+            }, user_db::{
+                create_token, create_user_db, find_user_by_id
+            }
+        }, permissions::EventPermissions, secrets::verification::VerificationStore, structs::AppState, test_utils::setup_test_db, user_store::UserStore
     };
 
     /// Создаёт пользователя с токеном и событие, добавляет пользователя в событие с указанными правами.
@@ -259,6 +250,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         });
 
         let app = Router::new()
@@ -315,6 +307,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         });
         let app = Router::new()
             .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
@@ -349,6 +342,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         });
         let app = Router::new()
             .route("/events/{event_id}/planning/poll/{poll_id}/vote", routing::post(vote_poll_handler))
@@ -423,6 +417,7 @@ mod tests {
             user_store,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         });
         
         let app = Router::new()

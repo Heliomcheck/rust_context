@@ -1,146 +1,122 @@
-use sqlx::PgPool;
-use chrono::{Utc};
-use crate::errors::AppError;
-use crate::models::{AlbumResponse, AlbumWithPhotosResponse, PhotoResponse};
+use crate::models::{PhotoResponse, PhotoSyncInfo};
+use chrono::{DateTime, Utc};
 
-// Создать альбом
-pub async fn create_album(
+// Получить все фото события (для первого синка)
+pub async fn get_all_photos(
     pool: &PgPool,
     event_id: i64,
-    title: &str,
-    description: Option<&str>,
-    created_by: i64,
-) -> Result<AlbumResponse, AppError> {
-    let row = sqlx::query!(
-        r#"
-        INSERT INTO albums (event_id, title, description, created_by)
-        VALUES ($1, $2, $3, $4)
-        RETURNING album_id, created_at, updated_at
-        "#,
-        event_id,
-        title,
-        description,
-        created_by,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    Ok(AlbumResponse {
-        album_id: row.album_id,
-        event_id,
-        title: title.to_owned(),
-        description: description.map(String::from),
-        created_by,
-        created_at: row.created_at.unwrap_or_else(Utc::now),
-        updated_at: row.updated_at.unwrap_or_else(Utc::now),
-    })
-}
-
-// Получить список активных альбомов события
-pub async fn get_event_albums(
-    pool: &PgPool,
-    event_id: i64,
-) -> Result<Vec<AlbumResponse>, AppError> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT album_id, title, description, created_by, created_at, updated_at
-        FROM albums
-        WHERE event_id = $1 AND is_active = true
-        ORDER BY created_at DESC
-        "#,
-        event_id,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    let albums = rows
-        .into_iter()
-        .map(|r| AlbumResponse {
-            album_id: r.album_id,
-            event_id,
-            title: r.title,
-            description: r.description,
-            created_by: r.created_by,
-            created_at: r.created_at.unwrap_or_else(Utc::now),
-            updated_at: r.updated_at.unwrap_or_else(Utc::now),
-        })
-        .collect();
-    Ok(albums)
-}
-
-// Получить конкретный альбом вместе с фотографиями
-pub async fn get_album_with_photos(
-    pool: &PgPool,
-    album_id: i64,
-) -> Result<AlbumWithPhotosResponse, AppError> {
-    let album = sqlx::query!(
-        r#"
-        SELECT event_id, title, description, created_by, created_at
-        FROM albums
-        WHERE album_id = $1 AND is_active = true
-        "#,
-        album_id,
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(AppError::DbError)?
-    .ok_or(AppError::NotFound("Album not found".into()))?;
-
-    let photos = get_photos_by_album(pool, album_id).await?;
-
-    Ok(AlbumWithPhotosResponse {
-        album_id,
-        event_id: album.event_id,
-        title: album.title,
-        description: album.description,
-        created_by: album.created_by,
-        created_at: album.created_at.unwrap_or_else(Utc::now),
-        photos,
-    })
-}
-
-// Вспомогательная: получить список активных фото альбома
-pub async fn get_photos_by_album(
-    pool: &PgPool,
-    album_id: i64,
 ) -> Result<Vec<PhotoResponse>, AppError> {
     let rows = sqlx::query!(
         r#"
-        SELECT photo_id, file_name, original_name, mime_type, file_size, uploaded_by, created_at
-        FROM album_photos
-        WHERE album_id = $1 AND is_active = true
-        ORDER BY created_at ASC
+        SELECT photo_id, etag, file_name, mime_type, file_size, created_at
+        FROM event_photos
+        WHERE event_id = $1 AND is_active = true
+        ORDER BY created_at DESC
         "#,
-        album_id,
+        event_id
     )
     .fetch_all(pool)
-    .await
-    .map_err(AppError::DbError)?;
+    .await?;
 
-    // Чтобы сформировать url, нужен event_id. Его можно получить из альбома, но здесь у нас его нет.
-    // Поэтому url будем формировать в обработчике, а здесь временно оставим пустым или передадим event_id параметром.
-    // Лучше передать event_id.
     Ok(rows
         .into_iter()
         .map(|r| PhotoResponse {
             photo_id: r.photo_id,
-            file_name: r.file_name,
-            original_name: r.original_name,
-            mime_type: r.mime_type,
-            file_size: r.file_size,
-            uploaded_by: r.uploaded_by,
+            etag: r.etag.unwrap_or_else(|| format!("\"{}\"", r.photo_id)),
+            url: format!("/events/{}/photos/{}", event_id, r.photo_id),
+            mime_type: r.mime_type.unwrap_or_else(|| "image/jpeg".to_string()),
+            file_size: r.file_size.unwrap_or(0),
             created_at: r.created_at.unwrap_or_else(Utc::now),
-            url: String::new(), // будет переопределено в обработчике
         })
         .collect())
 }
 
-// Вставить запись о фото
-pub async fn insert_photo(
+// Получить изменения по сравнению с клиентскими ETag
+pub async fn get_photo_changes(
     pool: &PgPool,
-    album_id: i64,
+    event_id: i64,
+    client_photos: &[ClientPhotoInfo],
+) -> Result<AlbumSyncResponse, AppError> {
+    // Получаем все актуальные фото с сервера
+    let server_rows = sqlx::query!(
+        r#"
+        SELECT photo_id, etag, file_name, mime_type, file_size, created_at
+        FROM event_photos
+        WHERE event_id = $1 AND is_active = true
+        "#,
+        event_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let server_map: std::collections::HashMap<i64, (String, String, String, i64, DateTime<Utc>)> = server_rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.photo_id,
+                (
+                    r.etag.unwrap_or_else(|| format!("\"{}\"", r.photo_id)),
+                    r.file_name,
+                    r.mime_type.unwrap_or_else(|| "image/jpeg".to_string()),
+                    r.file_size.unwrap_or(0),
+                    r.created_at.unwrap_or_else(Utc::now),
+                ),
+            )
+        })
+        .collect();
+
+    let client_map: std::collections::HashMap<i64, &str> = client_photos
+        .iter()
+        .map(|p| (p.photo_id, p.etag.as_str()))
+        .collect();
+
+    let mut added = Vec::new();
+    let mut changed = Vec::new();
+    let mut removed = Vec::new();
+
+    // 1. Находим добавленные и изменённые
+    for (id, (server_etag, file_name, mime_type, file_size, created_at)) in server_map {
+        match client_map.get(&id) {
+            Some(client_etag) if *client_etag != server_etag => {
+                // ETag не совпадает → изменилось
+                changed.push(PhotoSyncInfo {
+                    photo_id: id,
+                    etag: server_etag,
+                    url: format!("/events/{}/photos/{}", event_id, id),
+                    mime_type,
+                    file_size,
+                    created_at,
+                });
+            }
+            None => {
+                // Фото есть на сервере, нет у клиента → добавилось
+                added.push(PhotoSyncInfo {
+                    photo_id: id,
+                    etag: server_etag,
+                    url: format!("/events/{}/photos/{}", event_id, id),
+                    mime_type,
+                    file_size,
+                    created_at,
+                });
+            }
+            _ => {} // ETag совпадает → ничего не делаем
+        }
+    }
+
+    // 2. Находим удалённые
+    for client_id in client_map.keys() {
+        if !server_map.contains_key(client_id) {
+            removed.push(*client_id);
+        }
+    }
+
+    Ok(AlbumSyncResponse { added, changed, removed })
+}
+
+// Добавить фото (при загрузке)
+pub async fn add_photo(
+    pool: &PgPool,
+    event_id: i64,
     file_name: &str,
     original_name: &str,
     mime_type: &str,
@@ -149,227 +125,26 @@ pub async fn insert_photo(
 ) -> Result<PhotoResponse, AppError> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO album_photos (album_id, file_name, original_name, mime_type, file_size, uploaded_by)
+        INSERT INTO event_photos (event_id, file_name, original_name, mime_type, file_size, uploaded_by)
         VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING photo_id, created_at
+        RETURNING photo_id, etag, created_at
         "#,
-        album_id,
+        event_id,
         file_name,
         original_name,
         mime_type,
         file_size,
-        uploaded_by,
+        uploaded_by
     )
     .fetch_one(pool)
-    .await
-    .map_err(AppError::DbError)?;
+    .await?;
 
     Ok(PhotoResponse {
         photo_id: row.photo_id,
-        file_name: file_name.to_owned(),
-        original_name: Some(original_name.to_owned()),
-        mime_type: Some(mime_type.to_owned()),
-        file_size: Some(file_size),
-        uploaded_by,
+        etag: row.etag.unwrap_or_else(|| format!("\"{}\"", row.photo_id)),
+        url: format!("/events/{}/photos/{}", event_id, row.photo_id),
+        mime_type: mime_type.to_string(),
+        file_size,
         created_at: row.created_at.unwrap_or_else(Utc::now),
-        url: String::new(),
     })
-}
-
-// Мягкое удаление альбома (is_active = false)
-pub async fn deactivate_album(
-    pool: &PgPool,
-    album_id: i64,
-) -> Result<(), AppError> {
-    let result = sqlx::query!(
-        r#"
-        UPDATE albums
-        SET is_active = false, updated_at = NOW()
-        WHERE album_id = $1 AND is_active = true
-        RETURNING album_id
-        "#,
-        album_id,
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    if result.is_none() {
-        return Err(AppError::NotFound("Album not found".into()));
-    }
-    Ok(())
-}
-
-// Мягкое удаление фото
-pub async fn deactivate_photo(
-    pool: &PgPool,
-    photo_id: i64,
-) -> Result<(), AppError> {
-    let result = sqlx::query!(
-        r#"
-        UPDATE album_photos
-        SET is_active = false
-        WHERE photo_id = $1 AND is_active = true
-        RETURNING photo_id
-        "#,
-        photo_id,
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    if result.is_none() {
-        return Err(AppError::NotFound("Photo not found".into()));
-    }
-    Ok(())
-}
-
-// Проверить, принадлежит ли альбом событию (активный)
-pub async fn verify_album_in_event(
-    pool: &PgPool,
-    album_id: i64,
-    event_id: i64,
-) -> Result<bool, AppError> {
-    let row = sqlx::query!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM albums
-            WHERE album_id = $1 AND event_id = $2 AND is_active = true
-        ) as "exists!"
-        "#,
-        album_id,
-        event_id,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    Ok(row.exists)
-}
-
-// Получить информацию об одном фото по id
-pub async fn get_photo_by_id(
-    pool: &PgPool,
-    photo_id: i64,
-) -> Result<Option<(String, String, i64)>, AppError> {
-    // возвращаем (file_name, mime_type, album_id)
-    let row = sqlx::query!(
-        r#"
-        SELECT file_name, mime_type, album_id
-        FROM album_photos
-        WHERE photo_id = $1 AND is_active = true
-        "#,
-        photo_id,
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(AppError::DbError)?;
-
-    Ok(row.map(|r| (r.file_name, r.mime_type.unwrap_or_else(|| "application/octet-stream".into()), r.album_id)))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use anyhow::Result;
-    use crate::data_base::event_db;
-    use crate::data_base::user_db;
-    use crate::permissions::EventPermissions;
-    use crate::test_utils::setup_test_db;
-
-    async fn setup() -> Result<(PgPool, i64, i64)> {
-        let pool = setup_test_db().await;
-        let user_id = user_db::create_user_db(
-            &pool,
-            "albumuser",
-            "album@example.com",
-            "Album User",
-            &None,
-            &None,
-        )
-        .await?;
-        let event_id = event_db::create_event(
-            &pool,
-            "Album Event",
-            Some("desc".into()),
-            None,
-            None,
-            Some("loc".into()),
-            "#ff0000".into(),
-        )
-        .await?;
-        event_db::add_member(&pool, user_id, event_id, EventPermissions::OWNER).await?;
-        Ok((pool, user_id, event_id))
-    }
-
-    #[tokio::test]
-    async fn test_create_album() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        let album = create_album(&pool, event_id, "Vacation", Some("Summer pics"), user_id).await?;
-        assert_eq!(album.title, "Vacation");
-        assert_eq!(album.event_id, event_id);
-        assert_eq!(album.created_by, user_id);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_event_albums() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        create_album(&pool, event_id, "One", None, user_id).await?;
-        create_album(&pool, event_id, "Two", None, user_id).await?;
-        let albums = get_event_albums(&pool, event_id).await?;
-        assert_eq!(albums.len(), 2);
-        // сортировка по created_at DESC
-        assert_eq!(albums[0].title, "Two");
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_verify_album_in_event() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        let album = create_album(&pool, event_id, "Test", None, user_id).await?;
-        assert!(verify_album_in_event(&pool, album.album_id, event_id).await?);
-        assert!(!verify_album_in_event(&pool, album.album_id, event_id + 1).await?);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_insert_and_get_photo() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        let album = create_album(&pool, event_id, "Pics", None, user_id).await?;
-        let photo = insert_photo(
-            &pool,
-            album.album_id,
-            "temp",
-            "original.jpg",
-            "image/jpeg",
-            12345,
-            user_id,
-        )
-        .await?;
-        assert_eq!(photo.file_name, "temp");
-        assert!(photo.photo_id > 0);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_deactivate_album() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        let album = create_album(&pool, event_id, "Del", None, user_id).await?;
-        deactivate_album(&pool, album.album_id).await?;
-        let albums = get_event_albums(&pool, event_id).await?;
-        assert!(albums.is_empty());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_deactivate_photo() -> Result<()> {
-        let (pool, user_id, event_id) = setup().await?;
-        let album = create_album(&pool, event_id, "Pics", None, user_id).await?;
-        let photo = insert_photo(&pool, album.album_id, "temp", "o.jpg", "image/jpeg", 100, user_id).await?;
-        deactivate_photo(&pool, photo.photo_id).await?;
-        let photos = get_photos_by_album(&pool, album.album_id).await?;
-        assert!(photos.is_empty());
-        Ok(())
-    }
 }

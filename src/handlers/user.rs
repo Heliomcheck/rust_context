@@ -365,6 +365,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         })
     }
 

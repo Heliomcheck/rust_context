@@ -84,7 +84,8 @@ mod tests {
             tx: broadcast::channel(10).0,
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
+            db_pool: pool,
+            config: crate::Config::from_env()
         });
 
         // первый запрос создаёт код
