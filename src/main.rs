@@ -12,6 +12,7 @@ use axum::{
     response::IntoResponse, 
     routing
 };
+//use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -28,7 +29,6 @@ use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
 
 mod context;
-
 
 pub(crate) mod mail;
 pub(crate) mod user_store;
@@ -58,6 +58,16 @@ use crate::{
     test_utils::health_handler,
     handlers::modules::item::*,
     handlers::modules::task::*,
+};
+
+use crate::handlers::album::{
+    create_album_handler,
+    get_albums_handler,
+    get_album_handler,
+    upload_photo_handler,
+    get_photo_handler,
+    delete_album_handler,
+    delete_photo_handler,
 };
 
 
@@ -136,6 +146,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/assign", routing::post(assign_task_handler))
         .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/complete", routing::post(complete_task_handler))
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
+
+        // Альбомы
+        .route("/events/{event_id}/albums", routing::post(create_album_handler).get(get_albums_handler))
+        .route("/events/{event_id}/albums/{album_id}", routing::get(get_album_handler).delete(delete_album_handler))
+        .route("/events/{event_id}/albums/{album_id}/photos", routing::post(upload_photo_handler))
+        .route("/events/{event_id}/albums/{album_id}/photos/{photo_id}", routing::get(get_photo_handler).delete(delete_photo_handler))
 
         .with_state(state);
     

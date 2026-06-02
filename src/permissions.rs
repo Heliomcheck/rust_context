@@ -5,6 +5,7 @@ use crate::{
     errors::AppError,
     structs::*
 };
+use crate::data_base::event_db::has_permission;
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct EventPermissions {
@@ -16,7 +17,7 @@ impl EventPermissions {
         Self { bits: 0b000 }
     }
     pub fn new_value(bits: i32) -> Self {
-        Self { bits: bits }
+        Self { bits }
     }
 
     #[allow(dead_code)]
@@ -33,32 +34,23 @@ impl EventPermissions {
         self.bits
     }
 
-    // pub const INVITE: i32 = 1 << 0;
-    // pub const UPDATE_PERMISSIONS: i32 = 1 << 1;
-    // pub const DELETE_MEMBER: i32 = 1 << 2;
-    // pub const REMOVE_MEMBER: i32 = 1 << 1;
-    // pub const EDIT_EVENT: i32 = 1 << 2;
-    // pub const BAN_MEMBER: i32 = 1 << 3;
-    // pub const CREATE_MODULE: i32 = 1 << 4;
-    // pub const UPDATE_MODULE: i32 = 1 << 4;
-    // pub const DELETE_MODULE: i32 = 1 << 5;
-    // pub const VIEW_STATS: i32 = 1 << 6;
-    // pub const MANAGE_ROLES: i32 = 1 << 7;
-    // pub const VIEW_LOGS: i32 = 1 << 8;
-    // pub const ADMIN: i32 = 1 << 30;
-    // pub const OWNER: i32 = 1 << 31;
-
-    pub const OWNER:i32 = 1 << 2;
+    // Существующие константы
+    pub const OWNER: i32 = 1 << 2;
     #[allow(dead_code)]
-    pub const ADMIN:i32 = 1 << 1;
-    pub const MEMBER:i32 = 1 << 0;
+    pub const ADMIN: i32 = 1 << 1;
+    pub const MEMBER: i32 = 1 << 0;
 
+    // Новые константы для альбомов
+    pub const CREATE_ALBUM: i32 = 1 << 3;   // 8
+    pub const DELETE_ALBUM: i32 = 1 << 4;   // 16
+    pub const UPLOAD_PHOTO: i32 = 1 << 5;   // 32
+    pub const DELETE_PHOTO: i32 = 1 << 6;   // 64
 
     pub fn check_permission(&self, permission: i32) -> bool {
         (self.bits & permission) != 0
     }
 
-    pub fn add_permission(&mut self, permission: i32) -> &mut Self{
+    pub fn add_permission(&mut self, permission: i32) -> &mut Self {
         self.bits |= permission;
         self
     }
@@ -132,6 +124,21 @@ pub async fn update_user_permissions(
     .await?;
 
     Ok(())
+}
+
+/// Проверяет, имеет ли пользователь хотя бы одно из указанных прав в событии.
+pub async fn has_any_permission(
+    pool: &PgPool,
+    event_id: i64,
+    user_id: i64,
+    permissions: &[i32],
+) -> Result<bool, AppError> {
+    for &perm in permissions {
+        if has_permission(pool, event_id, user_id, perm).await? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]

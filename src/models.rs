@@ -403,6 +403,49 @@ pub struct TaskListItemData {
     pub assigned_user_name: Option<String>,
     pub completed: bool,
 }
+// Альбомы
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct CreateAlbumRequest {
+    #[validate(length(min = 1, max = 200, message = "Title must be between 1 and 200 characters"))]
+    pub title: String,
+    #[validate(length(max = 1000))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <-- добавить Deserialize
+pub struct AlbumResponse {
+    pub album_id: i64,
+    pub event_id: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub created_by: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
+pub struct AlbumWithPhotosResponse {
+    pub album_id: i64,
+    pub event_id: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub created_by: i64,
+    pub created_at: DateTime<Utc>,
+    pub photos: Vec<PhotoResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
+pub struct PhotoResponse {
+    pub photo_id: i64,
+    pub file_name: String,
+    pub original_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub file_size: Option<i64>,
+    pub uploaded_by: i64,
+    pub created_at: DateTime<Utc>,
+    pub url: String,
+}
 #[cfg(test)]
 mod tests {
     use super::*;
