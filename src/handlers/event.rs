@@ -205,7 +205,7 @@ pub async fn get_detailed_event_handler(
                 event,
                 invite_link: Some(invite_link),
                 members,
-                permissions: format!("{:b}", permissions.get_bits())
+                permissions: permissions.to_binary_string_short()
             }))))
         }
         Ok(false) => {
@@ -213,7 +213,7 @@ pub async fn get_detailed_event_handler(
                 event,
                 invite_link: None,
                 members,
-                permissions: format!("{:b}", permissions.get_bits())
+                permissions: permissions.to_binary_string_short()
             }))))
         }
         Err(e) => {

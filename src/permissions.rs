@@ -67,6 +67,10 @@ impl EventPermissions {
     pub fn remove_permission(&mut self, permission: i32) {
         self.bits &= !permission;
     }
+
+    pub fn to_binary_string_short(&self) -> String {
+        format!("{:03b}", self.bits)
+    }
 }
 
 pub async fn check_user_permissions(

@@ -15,6 +15,7 @@ use headers::{
     authorization::Bearer
 };
 
+use crate::permissions::EventPermissions;
 use crate::structs::*;
 
 use crate::{
@@ -61,7 +62,7 @@ pub async fn create_item_list_handler(
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?; // 2 = EDIT_EVENT
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?; // 2 = EDIT_EVENT
     if !has_perm {
         return Err(AppError::Forbidden("No permission to create item list".to_string()));
     }
@@ -111,7 +112,7 @@ pub async fn update_item_list_handler(
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?;
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to update item list".to_string()));
     }
@@ -215,7 +216,7 @@ pub async fn delete_item_list_handler(
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 4).await?; // 4 = DELETE_EVENT
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?; // 4 = DELETE_EVENT
     if !has_perm {
         return Err(AppError::Forbidden("No permission to delete item list".to_string()));
     }
