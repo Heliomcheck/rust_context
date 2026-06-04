@@ -343,10 +343,10 @@ mod tests {
     use tower::ServiceExt;
     use chrono::Utc;
     use crate::{
-        user_store::*,
+        //user_store::*,
         secrets::verification::VerificationStore,
         data_base::user_db::*,
-        test_utils::setup_test_db,
+        test_utils::*,
         structs::*,
         *
     };
@@ -362,7 +362,7 @@ mod tests {
     async fn create_state(pool: sqlx::PgPool) -> Arc<AppState> {
         Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         })
@@ -373,13 +373,14 @@ mod tests {
             .route("/user/edit", routing::post(update_user_data_handler))
             .route("/user/get_data", routing::get(get_user_data_handler))
             .route("/user/avatar", routing::post(upload_avatar_handler))
-            .route("/avatars/:user_id", routing::get(get_avatar_handler))
+            .route("/avatars/{user_id}", routing::get(get_avatar_handler))
             .with_state(state)
     }
 
     // ----------------- get_user_data -----------------
     #[tokio::test]
     async fn get_user_data_success() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_uid, token) = new_user_and_token(&pool).await;
         let state = create_state(pool).await;
@@ -397,6 +398,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_user_data_unauthorized() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = create_state(pool).await;
         let app = user_app(state);
@@ -413,6 +415,7 @@ mod tests {
     // ----------------- update_user_data -----------------
     #[tokio::test]
     async fn update_user_data_success() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let db_pool = setup_test_db().await;
         let (uid, token) = new_user_and_token(&db_pool).await;
         let state = create_state(db_pool).await;
@@ -435,6 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_user_data_unauthorized() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = create_state(pool).await;
         let app = user_app(state);
@@ -453,6 +457,7 @@ mod tests {
     // ----------------- upload avatar -----------------
     #[tokio::test]
     async fn upload_avatar_success() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_uid, token) = new_user_and_token(&pool).await;
         let state = create_state(pool).await;
@@ -477,6 +482,7 @@ mod tests {
     // ----------------- get avatar -----------------
     #[tokio::test]
     async fn get_avatar_not_found() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (uid, _token) = new_user_and_token(&pool).await;
         let state = create_state(pool).await;

@@ -2,9 +2,18 @@
 use sqlx::postgres::{PgPoolOptions, PgPool};
 #[allow(unused_imports)]
 use sqlx::Executor;
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
+use crate::{
+    data_base::user_db::create_token,
+    data_base::user_db::create_user_db,
+    data_base::event_db::create_event
+};
+use chrono::Utc;
 
 #[cfg(test)]
 pub async fn setup_test_db() -> PgPool {
+    let _guard = lock_db().await;
     dotenvy::dotenv().ok();
     
     let database_url = std::env::var("DATABASE_URL_TEST")
@@ -61,6 +70,45 @@ pub async fn clear_db(pool: &PgPool) {
     let _ = pool.execute("ALTER TABLE IF EXISTS token_store ENABLE TRIGGER ALL").await;
     let _ = pool.execute("ALTER TABLE IF EXISTS events ENABLE TRIGGER ALL").await;
     let _ = pool.execute("ALTER TABLE IF EXISTS users ENABLE TRIGGER ALL").await;
+}
+
+#[cfg(test)]
+static DB_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(test)]
+pub async fn lock_db() -> tokio::sync::MutexGuard<'static, ()> {
+    DB_LOCK.get_or_init(|| Mutex::new(())).lock().await
+}
+
+pub async fn new_user_and_token(pool: &sqlx::PgPool, name: &str, email: &str, token_str: &str) -> (i64, String) {
+    let uid = create_user_db(
+        pool, 
+        name, 
+        email, 
+        name, 
+        &None, 
+        &None
+    ).await.unwrap();
+    create_token(
+        pool, 
+        uid, 
+        token_str, 
+        Utc::now() + chrono::Duration::hours(1)
+    ).await.unwrap();
+
+    (uid, token_str.to_string())
+}
+
+#[cfg(test)]
+pub async fn new_event(pool: &sqlx::PgPool) -> i64 {
+    create_event(
+        pool, "Test Event", 
+        Some("Desc".into()),
+        None,
+        None,
+        Some("Room".into()),
+        "#123456".into()
+        ).await.unwrap()
 }
 
 #[utoipa::path(

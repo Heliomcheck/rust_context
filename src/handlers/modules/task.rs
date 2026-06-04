@@ -278,9 +278,9 @@ mod tests {
     use chrono::Utc;
 
     use crate::{
-        test_utils::setup_test_db,
+        test_utils::*,
         structs::AppState,
-        user_store::UserStore,
+        //user_store::UserStore,
         secrets::verification::VerificationStore,
         data_base::{
             user_db::{
@@ -296,6 +296,7 @@ mod tests {
     };
 
     async fn setup(perm: i32) -> (Router, Arc<AppState>, i64, String, i64) {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "task_user", "task_user@test.com", "Task User", &None, &None).await.unwrap();
         let token = "task_token";
@@ -305,18 +306,11 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });
 
-        let app = Router::new()
-            .route("/events/{event_id}/planning/tasks", routing::post(create_task_list_handler))
-            .route("/events/{event_id}/planning/tasks/{module_id}", routing::patch(update_task_list_handler))
-            .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/assign", routing::post(assign_task_handler))
-            .route("/events/{event_id}/planning/tasks/{module_id}/items/{task_id}/complete", routing::post(complete_task_handler))
-            .route("/events/{event_id}/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
-            .with_state(state.clone());
+        let app = create_app(state.clone()).await;
 
         (app, state, event_id, token.to_string(), user_id)
     }
@@ -476,13 +470,11 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });
-        let app = Router::new()
-            .route("/events/:event_id/planning/tasks/{module_id}", routing::delete(delete_task_list_handler))
-            .with_state(state.clone());
+        let app = create_app(state.clone()).await;
 
         // создаём task list от owner
         let create_payload = json!({"title":"Tasks","items":["task"]});

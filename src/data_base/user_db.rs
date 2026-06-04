@@ -293,6 +293,7 @@ pub async fn update_user_avatar(
     Ok(())
 }
 
+#[warn(dead_code)]
 pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { // non tested
     let users = sqlx::query_as::<_, User>(
         r#"
@@ -332,6 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_db() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -347,6 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_user_by_email() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let email = "find@mail.com";
         create_user_db(&pool, "finduser", email, "Test", &None, &None).await?;
@@ -358,6 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_edit_user_db() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -387,6 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_validate_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -410,6 +415,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_user_by_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -429,6 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_deactivate_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -448,6 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cleanup_expired_tokens() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -470,6 +478,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_user_by_id() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -487,6 +496,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_user_by_username() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let username = "username_test";
         create_user_db(&pool, username, "username@mail.com", "Test", &None, &None).await?;
@@ -498,6 +508,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_deactivate_all_user_tokens() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -521,6 +532,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_token_by_user_id() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -540,6 +552,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_refresh_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -562,6 +575,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_token_false() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let valid = validate_token(&pool, "non_existing_token").await?;
         assert!(!valid);
@@ -570,6 +584,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -598,6 +613,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_all_users() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let email = "loadall@mail.com";
         create_user_db(&pool, "loadall", email, "Load All", &None, &None).await?;

@@ -31,7 +31,6 @@ mod context;
 
 
 pub(crate) mod mail;
-pub(crate) mod user_store;
 pub(crate) mod secrets;
 pub(crate) mod models;
 pub(crate) mod handlers;
@@ -47,7 +46,6 @@ use structs::*;
 use context::*;
 
 use crate::{
-    user_store::*,
     handlers::auth::*,
     handlers::user::*,
     handlers::event::*,
@@ -74,18 +72,27 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Server started");
 
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
-    let user_store = Arc::new(Mutex::new(UserStore::new()));
     let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
     let db_pool = create_pool(&database_url.as_str()).await?;
 
-    let state = Arc::new(AppState {tx, user_store, verification_store, db_pool});
+    let state = Arc::new(AppState {tx, verification_store, db_pool});
 
-    {
-        let mut store = state.user_store.lock().await;
-        store.load_from_db(&state.db_pool).await.context("Error of loading db in cache")?;
-    }
+    let app = create_app(state).await;
+    
+    let listner = TcpListener::bind(args[1].as_str()).await
+        .context("Can't bind to address")?;
 
-    let app = Router::new()
+    println!("Server was start");
+
+    axum::serve(listner, app).await
+        .context("Server is false")?;
+    
+    Ok(())
+}
+
+
+async fn create_app(state: Arc<AppState>) -> Router {
+    let app =Router::new()
         .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/auth/request_code", routing::post(request_code_handler))
         .route("/auth/verify_code", routing::post(verify_code_handler))
@@ -138,17 +145,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
 
         .with_state(state);
-    
-    let listner = TcpListener::bind(args[1].as_str()).await
-        .context("Can't bind to address")?;
-
-    println!("Server was start");
-
-    axum::serve(listner, app).await
-        .context("Server is false")?;
-
-    
-    Ok(())
+    app
 }
 
 

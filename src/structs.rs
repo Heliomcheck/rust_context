@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use utoipa::{ToSchema};
 
 use crate::{
-    user_store::UserStore,
+    //user_store::UserStore,
     secrets::verification::VerificationStore,
     models::EditUserRequest,
     permissions::*,
@@ -103,7 +103,7 @@ impl User {
 #[derive(Clone)]
 pub struct AppState {
     pub tx: broadcast::Sender<ChatMessage>,
-    pub user_store: Arc<Mutex<UserStore>>,
+    //pub user_store: Arc<Mutex<UserStore>>,
     pub verification_store: Arc<Mutex<VerificationStore>>,
     pub db_pool: PgPool
 }

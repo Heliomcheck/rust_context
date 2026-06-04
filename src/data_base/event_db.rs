@@ -628,11 +628,13 @@ pub async fn get_or_create_event_token(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::setup_test_db;
+    use crate::permissions::EventPermissions;
+use crate::test_utils::*;
     use crate::data_base::user_db::create_user_db;
 
     #[tokio::test]
     async fn test_create_and_get_event() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let event_id = create_event(
             &pool,
@@ -651,6 +653,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_event_not_found() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let result = get_event_by_id(&pool, 9999).await;
         assert!(result.is_err());
@@ -659,6 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_event() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let event_id = create_event(
             &pool,
@@ -686,6 +690,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_and_check_member() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -704,7 +709,7 @@ mod tests {
             Some("uiu".to_string()),
             "#123456".to_string()
         ).await?;
-        add_member(&pool, user_id, event_id, 10,).await?;
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER,).await?;
         let exists = check_user_in_event(&pool, user_id, event_id).await?;
         assert!(exists);
         Ok(())
@@ -712,6 +717,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_member() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -738,6 +744,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_member_role() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -764,6 +771,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_member_status() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -789,6 +797,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_events() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -814,6 +823,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_token() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let event_id = create_event(
             &pool, "Event",
@@ -831,6 +841,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_event() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -858,6 +869,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_users_in_event() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -886,6 +898,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_user_in_event() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -913,6 +926,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_event_members() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -943,6 +957,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_users_by_permission_and_has_permission() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -972,6 +987,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_event_status() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let event_id = create_event(
             &pool,

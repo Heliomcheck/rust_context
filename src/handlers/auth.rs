@@ -101,18 +101,18 @@ pub async fn register_handler(
         return Err(AppError::Internal("Failed to create session".to_string()));
     }
     
-    let mut user_store = state.user_store.lock().await;
-    if let Err(e) = user_store.add_user(
-        user_id,
-        payload.username.clone(),
-        payload.email.clone(),
-        payload.birthday.clone(),
-        payload.display_name.clone(),
-        payload.description.clone(),
-        &state.db_pool,
-    ).await {
-        tracing::warn!("User created in DB but failed to add to cache: {}", e);
-    }
+    // let mut user_store = state.user_store.lock().await;
+    // if let Err(e) = user_store.add_user(
+    //     user_id,
+    //     payload.username.clone(),
+    //     payload.email.clone(),
+    //     payload.birthday.clone(),
+    //     payload.display_name.clone(),
+    //     payload.description.clone(),
+    //     &state.db_pool,
+    // ).await {
+    //     tracing::warn!("User created in DB but failed to add to cache: {}", e);
+    // }
     
     Ok((StatusCode::CREATED, Json(json!(RegisterResponse {token, user_id}))))
 }
@@ -347,7 +347,6 @@ mod tests {
     use crate::{
         data_base::user_db::*,
         structs::*,
-        user_store::*,
         secrets::verification::VerificationStore,
         *
     };
@@ -355,6 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_handler() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
 
         sqlx::query!("DELETE FROM token_store").execute(&pool).await?;
@@ -362,7 +362,6 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool
         });
@@ -394,10 +393,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_token_validate_handler_invalid() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool
         });
@@ -416,6 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_logout_handler_success() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -430,7 +431,7 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool.clone(),
         });
@@ -455,6 +456,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_username_check_handler() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         create_user_db(
             &pool,
@@ -466,7 +468,7 @@ mod tests {
         ).await?;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool
         });
@@ -486,6 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_code_new_user() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
 
         let email = "new@mail.com";
@@ -507,7 +510,7 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(verification)),
             db_pool: pool,
         });
@@ -534,10 +537,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_code_invalid() -> anyhow::Result<()> {
+        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
+            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });
