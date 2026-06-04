@@ -122,19 +122,19 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/planning", routing::get(get_modules_handler))
 
         .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
-        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::post(vote_poll_handler))
+        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
         .route("/events/{event_id}/planning/poll/{module_id}", routing::delete(delete_poll_handler))
         .route("/events/{event_id}/planning/poll/{module_id}", routing::put(update_poll_handler))
 
         .route("/events/{event_id}/planning/item_list", routing::post(create_item_list_handler))
         .route("/events/{event_id}/planning/item_list/{module_id}", routing::patch(update_item_list_handler))
-        .route("/events/{event_id}/planning/item_list/{module_id}/items/{item_list_id}/assign", routing::post(assign_item_handler))
+        .route("/events/{event_id}/planning/item_list/{module_id}/items/{item_id}/assign", routing::patch(assign_item_handler))
         .route("/events/{event_id}/planning/item_list/{module_id}", routing::delete(delete_item_list_handler))
 
         .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::patch(update_task_list_handler))
-        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/assign", routing::post(assign_task_handler))
-        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/complete", routing::post(complete_task_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_id}/assign", routing::patch(assign_task_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_id}/complete", routing::patch(complete_task_handler))
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
 
         .with_state(state);

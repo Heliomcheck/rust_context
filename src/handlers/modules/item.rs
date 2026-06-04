@@ -190,7 +190,7 @@ pub async fn assign_item_handler(
 }
 
 #[utoipa::path(
-    post,
+    delete,
     path = "/events/{event_id}/planning/item_list/{module_id}",
     tag = "Modules",
     security(
