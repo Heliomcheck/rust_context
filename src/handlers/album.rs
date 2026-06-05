@@ -417,6 +417,7 @@ mod tests {
     use tower::ServiceExt;
     use tokio::sync::{broadcast, Mutex};
 
+    use crate::config::Config;
     use crate::data_base::user_db;
     use crate::data_base::event_db;
     use crate::permissions::EventPermissions;
