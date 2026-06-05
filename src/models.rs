@@ -370,6 +370,36 @@ pub struct TaskListItemData {
 
 // ====================== Albums ======================
 
+// Запрос на синхронизацию от клиента
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AlbumSyncRequest {
+    pub photos: Vec<ClientPhotoInfo>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ClientPhotoInfo {
+    pub photo_id: i64,
+    pub etag: String,
+}
+
+// Ответ сервера на синхронизацию
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AlbumSyncResponse {
+    pub added: Vec<PhotoSyncInfo>,
+    pub changed: Vec<PhotoSyncInfo>,
+    pub removed: Vec<i64>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PhotoSyncInfo {
+    pub photo_id: i64,
+    pub etag: String,
+    pub url: String,
+    pub mime_type: String,
+    pub file_size: i64,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateAlbumRequest {
     #[validate(length(min = 1, max = 200, message = "Title must be between 1 and 200 characters"))]

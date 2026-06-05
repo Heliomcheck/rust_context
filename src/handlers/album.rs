@@ -36,7 +36,6 @@ fn photo_url(event_id: i64, album_id: i64, photo_id: i64) -> String {
     format!("/events/{}/albums/{}/photos/{}", event_id, album_id, photo_id)
 }
 
-// ====================== 1. Создание альбома ======================
 #[utoipa::path(
     post,
     path = "/events/{event_id}/albums",
@@ -86,7 +85,6 @@ pub async fn create_album_handler(
     Ok((StatusCode::CREATED, Json(album)))
 }
 
-// ====================== 2. Список альбомов события ======================
 #[utoipa::path(
     get,
     path = "/events/{event_id}/albums",
@@ -432,6 +430,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool.clone(),
+            config: Config::from_env()
         })
     }
 

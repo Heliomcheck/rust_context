@@ -27,6 +27,7 @@ use tracing_subscriber::{
 use utoipa_swagger_ui::SwaggerUi;
 use utoipa::OpenApi;
 
+
 mod context;
 
 pub(crate) mod mail;
@@ -41,6 +42,7 @@ pub(crate) mod errors;
 pub(crate) mod structs;
 pub(crate) mod permissions;
 pub(crate) mod api_doc;
+pub(crate) mod config;
 
 use structs::*;
 use context::*;
@@ -57,6 +59,7 @@ use crate::{
     test_utils::health_handler,
     handlers::modules::item::*,
     handlers::modules::task::*,
+    config::*,
 };
 
 use crate::handlers::album::{
@@ -72,10 +75,9 @@ use crate::handlers::album::{
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv().ok();
+    let config = Config::from_env();
+    
     let args: Vec<String> = std::env::args().collect();
-
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL not set")?;
 
     let _guard = setup_logging();
 
@@ -84,9 +86,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let (tx, _rx) = broadcast::channel::<ChatMessage>(100);
     let user_store = Arc::new(Mutex::new(UserStore::new()));
     let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
-    let db_pool = create_pool(&database_url.as_str()).await?;
+    let db_pool = create_pool(&config.database_url.as_str()).await?;
 
-    let state = Arc::new(AppState {tx, user_store, verification_store, db_pool});
+    let state = Arc::new(AppState {tx, user_store, verification_store, db_pool, config});
 
     {
         let mut store = state.user_store.lock().await;

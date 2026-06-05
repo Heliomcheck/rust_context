@@ -1,9 +1,9 @@
 use sqlx::PgPool;
-use chrono::{Utc};
+use chrono::Utc;
 use crate::errors::AppError;
 use crate::models::{AlbumResponse, AlbumWithPhotosResponse, PhotoResponse};
 
-// Создать альбом
+/// Создать альбом
 pub async fn create_album(
     pool: &PgPool,
     event_id: i64,
@@ -12,11 +12,9 @@ pub async fn create_album(
     created_by: i64,
 ) -> Result<AlbumResponse, AppError> {
     let row = sqlx::query!(
-        r#"
-        INSERT INTO albums (event_id, title, description, created_by)
-        VALUES ($1, $2, $3, $4)
-        RETURNING album_id, created_at, updated_at
-        "#,
+        r#"INSERT INTO albums (event_id, title, description, created_by)
+           VALUES ($1, $2, $3, $4)
+           RETURNING album_id, created_at, updated_at"#,
         event_id,
         title,
         description,
@@ -37,18 +35,16 @@ pub async fn create_album(
     })
 }
 
-// Получить список активных альбомов события
+/// Получить список активных альбомов события
 pub async fn get_event_albums(
     pool: &PgPool,
     event_id: i64,
 ) -> Result<Vec<AlbumResponse>, AppError> {
     let rows = sqlx::query!(
-        r#"
-        SELECT album_id, title, description, created_by, created_at, updated_at
-        FROM albums
-        WHERE event_id = $1 AND is_active = true
-        ORDER BY created_at DESC
-        "#,
+        r#"SELECT album_id, title, description, created_by, created_at, updated_at
+           FROM albums
+           WHERE event_id = $1 AND is_active = true
+           ORDER BY created_at DESC"#,
         event_id,
     )
     .fetch_all(pool)
@@ -70,17 +66,15 @@ pub async fn get_event_albums(
     Ok(albums)
 }
 
-// Получить конкретный альбом вместе с фотографиями
+/// Получить конкретный альбом вместе с фотографиями
 pub async fn get_album_with_photos(
     pool: &PgPool,
     album_id: i64,
 ) -> Result<AlbumWithPhotosResponse, AppError> {
     let album = sqlx::query!(
-        r#"
-        SELECT event_id, title, description, created_by, created_at
-        FROM albums
-        WHERE album_id = $1 AND is_active = true
-        "#,
+        r#"SELECT event_id, title, description, created_by, created_at
+           FROM albums
+           WHERE album_id = $1 AND is_active = true"#,
         album_id,
     )
     .fetch_optional(pool)
@@ -101,27 +95,22 @@ pub async fn get_album_with_photos(
     })
 }
 
-// Вспомогательная: получить список активных фото альбома
+/// Вспомогательная: получить список активных фото альбома
 pub async fn get_photos_by_album(
     pool: &PgPool,
     album_id: i64,
 ) -> Result<Vec<PhotoResponse>, AppError> {
     let rows = sqlx::query!(
-        r#"
-        SELECT photo_id, file_name, original_name, mime_type, file_size, uploaded_by, created_at
-        FROM album_photos
-        WHERE album_id = $1 AND is_active = true
-        ORDER BY created_at ASC
-        "#,
+        r#"SELECT photo_id, file_name, original_name, mime_type, file_size, uploaded_by, created_at
+           FROM album_photos
+           WHERE album_id = $1 AND is_active = true
+           ORDER BY created_at ASC"#,
         album_id,
     )
     .fetch_all(pool)
     .await
     .map_err(AppError::DbError)?;
 
-    // Чтобы сформировать url, нужен event_id. Его можно получить из альбома, но здесь у нас его нет.
-    // Поэтому url будем формировать в обработчике, а здесь временно оставим пустым или передадим event_id параметром.
-    // Лучше передать event_id.
     Ok(rows
         .into_iter()
         .map(|r| PhotoResponse {
@@ -132,12 +121,12 @@ pub async fn get_photos_by_album(
             file_size: r.file_size,
             uploaded_by: r.uploaded_by,
             created_at: r.created_at.unwrap_or_else(Utc::now),
-            url: String::new(), // будет переопределено в обработчике
+            url: String::new(), // будет заполнено в обработчике
         })
         .collect())
 }
 
-// Вставить запись о фото
+/// Вставить запись о фото
 pub async fn insert_photo(
     pool: &PgPool,
     album_id: i64,
@@ -148,11 +137,9 @@ pub async fn insert_photo(
     uploaded_by: i64,
 ) -> Result<PhotoResponse, AppError> {
     let row = sqlx::query!(
-        r#"
-        INSERT INTO album_photos (album_id, file_name, original_name, mime_type, file_size, uploaded_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING photo_id, created_at
-        "#,
+        r#"INSERT INTO album_photos (album_id, file_name, original_name, mime_type, file_size, uploaded_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING photo_id, created_at"#,
         album_id,
         file_name,
         original_name,
@@ -176,14 +163,12 @@ pub async fn insert_photo(
     })
 }
 
-// Мягкое удаление альбома (is_active = false)
 /// Полное удаление альбома: удаляет записи в БД и папку с фотографиями
 pub async fn delete_album(
     pool: &PgPool,
     album_id: i64,
     event_id: i64,
 ) -> Result<(), AppError> {
-    // Удаляем записи в БД (каскадом удалятся album_photos)
     let result = sqlx::query!(
         "DELETE FROM albums WHERE album_id = $1 AND event_id = $2 AND is_active = true",
         album_id,
@@ -197,7 +182,6 @@ pub async fn delete_album(
         return Err(AppError::NotFound("Album not found".into()));
     }
 
-    // Удаляем папку с файлами альбома
     let album_dir = crate::handlers::album::album_dir(event_id, album_id);
     if album_dir.exists() {
         tokio::fs::remove_dir_all(&album_dir).await.map_err(|e| {
@@ -216,7 +200,6 @@ pub async fn delete_photo(
     album_id: i64,
     event_id: i64,
 ) -> Result<(), AppError> {
-    // Сначала получаем имя файла, чтобы знать, что удалять с диска
     let row = sqlx::query!(
         "SELECT file_name FROM album_photos WHERE photo_id = $1 AND is_active = true",
         photo_id,
@@ -226,7 +209,6 @@ pub async fn delete_photo(
     .map_err(AppError::DbError)?
     .ok_or(AppError::NotFound("Photo not found".into()))?;
 
-    // Удаляем запись
     sqlx::query!(
         "DELETE FROM album_photos WHERE photo_id = $1",
         photo_id,
@@ -235,7 +217,6 @@ pub async fn delete_photo(
     .await
     .map_err(AppError::DbError)?;
 
-    // Удаляем файл
     let file_path = crate::handlers::album::album_dir(event_id, album_id).join(&row.file_name);
     if file_path.exists() {
         tokio::fs::remove_file(&file_path).await.map_err(|e| {
@@ -247,15 +228,14 @@ pub async fn delete_photo(
     Ok(())
 }
 
-// Проверить, принадлежит ли альбом событию (активный)
+/// Проверить, принадлежит ли альбом событию (активный)
 pub async fn verify_album_in_event(
     pool: &PgPool,
     album_id: i64,
     event_id: i64,
 ) -> Result<bool, AppError> {
     let row = sqlx::query!(
-        r#"
-        SELECT EXISTS(
+        r#"SELECT EXISTS(
             SELECT 1 FROM albums
             WHERE album_id = $1 AND event_id = $2 AND is_active = true
         ) as "exists!"
@@ -270,12 +250,12 @@ pub async fn verify_album_in_event(
     Ok(row.exists)
 }
 
-// Получить информацию об одном фото по id
+/// Получить информацию об одном фото по id (вспомогательная)
+#[allow(dead_code)]
 pub async fn get_photo_by_id(
     pool: &PgPool,
     photo_id: i64,
 ) -> Result<Option<(String, String, i64)>, AppError> {
-    // возвращаем (file_name, mime_type, album_id)
     let row = sqlx::query!(
         r#"
         SELECT file_name, mime_type, album_id
@@ -288,8 +268,14 @@ pub async fn get_photo_by_id(
     .await
     .map_err(AppError::DbError)?;
 
-    Ok(row.map(|r| (r.file_name, r.mime_type.unwrap_or_else(|| "application/octet-stream".into()), r.album_id)))
+    Ok(row.map(|r| (
+        r.file_name,
+        r.mime_type.unwrap_or_else(|| "application/octet-stream".into()),
+        r.album_id,
+    )))
 }
+
+// ====================== Тесты ======================
 
 #[cfg(test)]
 mod tests {

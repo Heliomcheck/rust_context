@@ -8,7 +8,10 @@ CREATE TABLE events (
     color VARCHAR(7) NOT NULL DEFAULT '#123456' ,
     location VARCHAR(200),
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    status_event VARCHAR(30) NOT NULL DEFAULT 'active'
+    status_event VARCHAR(30) NOT NULL DEFAULT 'active',
+    album_updated_at TIMESTAMPTZ DEFAULT NOW(),
+    album_size BIGINT DEFAULT 0,
+    album_photos_count INT DEFAULT 0
 );
 
 CREATE INDEX idx_events_status_event ON events(status_event);

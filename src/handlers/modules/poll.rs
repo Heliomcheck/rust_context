@@ -142,7 +142,7 @@ pub async fn delete_poll_handler(
     Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
 }
 
-// ====================== Голосование (с логированием) ======================
+// ====================== Голосование ======================
 
 #[utoipa::path(
     patch,
@@ -175,9 +175,8 @@ pub async fn vote_poll_handler(
         return Err(AppError::Forbidden("Poll not in this event".to_string()));
     }
 
-    println!("🔍 Voting: poll_id={}, user_id={}, indexes={:?}", path.module_id, user.user_id, payload.option_indexes);
-
     vote_on_poll(&state.db_pool, path.module_id, user.user_id, payload.option_indexes).await?;
+
     Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
@@ -199,6 +198,7 @@ mod tests {
     use chrono::Utc;
 
     use crate::{
+        config::Config,
         test_utils::setup_test_db,
         structs::AppState,
         user_store::UserStore,
@@ -223,6 +223,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env(),
         });
 
         let app = Router::new()
@@ -278,6 +279,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env(),
         });
         let app = Router::new()
             .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
@@ -297,27 +299,28 @@ mod tests {
 
     // ----------------- vote poll -----------------
     async fn poll_with_voter() -> (Router, Arc<AppState>, i64, String, i64, i64) {
-    let pool = setup_test_db().await;
-    let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
-    let voter_id = create_user_db(&pool, "voter", "voter@test.com", "Voter", &None, &None).await.unwrap();
-    let token = "voter_token";
-    create_token(&pool, voter_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
-    let event_id = create_event(&pool, "Vote Event", None, None, None, None, "#000".into()).await.unwrap();
-    add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
-    add_member(&pool, voter_id, event_id, EventPermissions::MEMBER).await.unwrap();
-    let module_id = create_poll(&pool, event_id, "Q".into(), creator_id, vec!["A".into(), "B".into()], false).await.unwrap();
+        let pool = setup_test_db().await;
+        let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
+        let voter_id = create_user_db(&pool, "voter", "voter@test.com", "Voter", &None, &None).await.unwrap();
+        let token = "voter_token";
+        create_token(&pool, voter_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        let event_id = create_event(&pool, "Vote Event", None, None, None, None, "#000".into()).await.unwrap();
+        add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
+        add_member(&pool, voter_id, event_id, EventPermissions::MEMBER).await.unwrap();
+        let module_id = create_poll(&pool, event_id, "Q".into(), creator_id, vec!["A".into(), "B".into()], false).await.unwrap();
 
-    let state = Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        user_store: Arc::new(Mutex::new(UserStore::new())),
-        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: pool,
-    });
-    let app = Router::new()
-        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
-        .with_state(state.clone());
-    (app, state, event_id, token.to_string(), voter_id, module_id)
-}
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+            config: Config::from_env(),
+        });
+        let app = Router::new()
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
+            .with_state(state.clone());
+        (app, state, event_id, token.to_string(), voter_id, module_id)
+    }
 
     #[tokio::test]
     async fn vote_success() -> anyhow::Result<()> {
@@ -330,11 +333,7 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        let status = resp.status();
-        // временно выведем тело ответа для диагностики
-        let body_bytes = resp.into_body().collect().await?.to_bytes();
-        println!("🔍 vote_success status: {}, body: {}", status, String::from_utf8_lossy(&body_bytes));
-        assert_eq!(status, StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 
@@ -373,6 +372,7 @@ mod tests {
             user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env(),
         });
         let app = Router::new()
             .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
