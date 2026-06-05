@@ -1,28 +1,27 @@
 use tokio::{
-    net::TcpListener, 
+    net::TcpListener,
     sync::broadcast
 };
 use anyhow::{
-    Context, 
+    Context,
     Result
-}; 
+};
 use axum::{
-    Router, 
-    extract::ws::WebSocketUpgrade, 
-    response::IntoResponse, 
+    Router,
+    extract::ws::WebSocketUpgrade,
+    response::IntoResponse,
     routing
 };
-//use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing_appender::{
-    non_blocking, 
+    non_blocking,
     rolling
 };
 use tracing_subscriber::{
-    fmt, 
-    prelude::*, 
+    fmt,
+    prelude::*,
     EnvFilter
 };
 use utoipa_swagger_ui::SwaggerUi;
@@ -70,7 +69,6 @@ use crate::handlers::album::{
     delete_photo_handler,
 };
 
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv().ok();
@@ -102,7 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/auth/resend_code", routing::post(resend_code_handler)) //delete in future
         .route("/auth/register", routing::post(register_handler))
         .route("/auth/token_validate", routing::post(token_validate_handler))
-        .route("/auth/logout", routing::post(logout_handler)) 
+        .route("/auth/logout", routing::post(logout_handler))
         .route("/auth/check_username", routing::post(username_check_handler))
 
         .route("/user/edit", routing::post(update_user_data_handler))
@@ -111,7 +109,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         //.route("/chat", routing::get(websocket_handler))
         .route("/health", routing::get(health_handler)) // delete in future
-        
+
         .route("/avatars/{file_name}", routing::get(get_avatar_handler))
 
         .route("/events", routing::post(create_event_handler))
@@ -119,7 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}", routing::put(update_event_handler))
         .route("/events/{event_id}/status", routing::patch(update_event_status_handler))
         .route("/events/{event_id}", routing::delete(delete_event_handler))
-        
+
         .route("/events", routing::get(get_user_events_handler)) // query required // status = ""/limit = 10/offset = 10
         .route("/events/join", routing::post(event_join_handler))
         .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
@@ -128,23 +126,26 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler))
         .route("/event-avatars/{event_id}", routing::get(get_event_avatar_handler))
         .route("/events/{event_id}/avatar", routing::delete(delete_event_avatar_handler))
-        
+
         .route("/events/{event_id}/planning", routing::get(get_modules_handler))
 
+        // Планирование: опросы
         .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
-        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::post(vote_poll_handler))
+        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))  // PATCH
         .route("/events/{event_id}/planning/poll/{module_id}", routing::delete(delete_poll_handler))
         .route("/events/{event_id}/planning/poll/{module_id}", routing::put(update_poll_handler))
 
+        // Планирование: списки вещей
         .route("/events/{event_id}/planning/item_list", routing::post(create_item_list_handler))
         .route("/events/{event_id}/planning/item_list/{module_id}", routing::patch(update_item_list_handler))
-        .route("/events/{event_id}/planning/item_list/{module_id}/items/{item_list_id}/assign", routing::post(assign_item_handler))
+        .route("/events/{event_id}/planning/item_list/{module_id}/items/{item_id}/assign", routing::patch(assign_item_handler)) // PATCH, {item_id}
         .route("/events/{event_id}/planning/item_list/{module_id}", routing::delete(delete_item_list_handler))
 
+        // Планирование: списки задач
         .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::patch(update_task_list_handler))
-        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/assign", routing::post(assign_task_handler))
-        .route("/events/{event_id}/planning/task_list/{module_id}/tasks/{task_list_id}/complete", routing::post(complete_task_handler))
+        .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/assign", routing::patch(assign_task_handler)) // PATCH, {task_id}
+        .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/complete", routing::patch(complete_task_handler)) // PATCH, {task_id}
         .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
 
         // Альбомы
@@ -154,7 +155,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/events/{event_id}/albums/{album_id}/photos/{photo_id}", routing::get(get_photo_handler).delete(delete_photo_handler))
 
         .with_state(state);
-    
+
     let listner = TcpListener::bind(args[1].as_str()).await
         .context("Can't bind to address")?;
 
@@ -163,10 +164,8 @@ async fn main() -> Result<(), anyhow::Error> {
     axum::serve(listner, app).await
         .context("Server is false")?;
 
-    
     Ok(())
 }
-
 
 #[allow(dead_code)]
 async fn websocket_handler(
@@ -179,12 +178,12 @@ async fn websocket_handler(
 fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
     let file_appender = rolling::daily("logs", "app.log");
     let (non_blocking, guard) = non_blocking(file_appender);
-    
+
     tracing_subscriber::registry()
         .with(fmt::layer().with_writer(std::io::stdout))
         .with(fmt::layer().with_writer(non_blocking))
         .with(EnvFilter::from_default_env())
         .init();
-    
+
     guard
 }

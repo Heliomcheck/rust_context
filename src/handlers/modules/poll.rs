@@ -27,22 +27,21 @@ use crate::{
     structs::*
 };
 
+use crate::data_base::plainning_modules::poll_db::verify_poll_in_event;
 
+// ====================== Обработчики ======================
 
 #[utoipa::path(
     post,
     path = "/events/{event_id}/planning/poll",
     tag = "Modules",
-    security(
-        ("bearerAuth" = [])
-    ),
+    security(("bearerAuth" = [])),
     request_body = CreatePollRequest,
     responses(
         (status = 201, description = "Poll created", body = PollResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
     )
 )]
 pub async fn create_poll_handler(
@@ -52,29 +51,21 @@ pub async fn create_poll_handler(
     Json(payload): Json<CreatePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
-
     let event = get_event_by_id(&state.db_pool, event_id).await?;
-
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
     match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {},
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission".to_string())),
         Err(e) => return Err(e),
     };
 
     let _ = create_poll(
-        &state.db_pool,
-        event_id,
-        payload.title,
-        user.user_id,
-        payload.options,
-        payload.multiple_choice
+        &state.db_pool, event_id, payload.title, user.user_id,
+        payload.options, payload.multiple_choice
     ).await?;
-
-    // let poll = get_poll_by_id(&state.db_pool, poll_id).await?;
 
     Ok((StatusCode::CREATED, Json(SuccessResponse { success: true })))
 }
@@ -83,16 +74,13 @@ pub async fn create_poll_handler(
     put,
     path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
-    security(
-        ("bearerAuth" = [])
-    ),
+    security(("bearerAuth" = [])),
     request_body = UpdatePollRequest,
     responses(
-        (status = 204, description = "Poll updated", body = SuccessResponse),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
+        (status = 200, description = "Poll updated"),
+        (status = 400, description = "Bad request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
     )
 )]
 pub async fn update_poll_handler(
@@ -102,18 +90,13 @@ pub async fn update_poll_handler(
     Json(payload): Json<UpdatePollRequest>
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
-
     let event = get_event_by_id(&state.db_pool, path.event_id).await?;
-
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-
-    if !is_member {
+    if !check_user_in_event(&state.db_pool, event.event_id, user.user_id).await? {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-
     match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {},
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Ok(false) => return Err(AppError::UserNotInEvent("Not allowed".to_string())),
         Err(e) => return Err(e),
     };
 
@@ -128,36 +111,27 @@ pub async fn update_poll_handler(
     delete,
     path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
-    security(
-        ("bearerAuth" = [])
-    ),
-    request_body = DeletePollRequest,
+    security(("bearerAuth" = [])),
     responses(
-        (status = 204, description = "Poll deleted", body = SuccessResponse),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
+        (status = 200, description = "Poll deleted"),
+        (status = 400, description = "Bad request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
     )
 )]
 pub async fn delete_poll_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
     Path(path): Path<EventModule>,
-    //Json(payload): Json<DeletePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
-
     let event = get_event_by_id(&state.db_pool, path.event_id).await?;
-
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
+    if !check_user_in_event(&state.db_pool, event.event_id, user.user_id).await? {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
-    
     match check_user_permissions(&state.db_pool, &event, &user, EventPermissions::OWNER).await {
         Ok(true) => {},
-        Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to update permissions".to_string())),
+        Ok(false) => return Err(AppError::UserNotInEvent("Not allowed".to_string())),
         Err(e) => return Err(e),
     };
 
@@ -168,20 +142,19 @@ pub async fn delete_poll_handler(
     Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
 }
 
+// ====================== Голосование (с логированием) ======================
+
 #[utoipa::path(
     patch,
     path = "/events/{event_id}/planning/poll/{module_id}/vote",
     tag = "Modules",
-    security(
-        ("bearerAuth" = [])
-    ),
+    security(("bearerAuth" = [])),
     request_body = VotePollRequest,
     responses(
-        (status = 204, description = "Poll voted successfully", body = SuccessResponse),
-        (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
-        (status = 404, description = "User or event not found", body = ErrorResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse)
+        (status = 200, description = "Vote accepted"),
+        (status = 400, description = "Bad request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
     )
 )]
 pub async fn vote_poll_handler(
@@ -191,22 +164,24 @@ pub async fn vote_poll_handler(
     Json(payload): Json<VotePollRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, &auth.token()).await?;
-
     let event = get_event_by_id(&state.db_pool, path.event_id).await?;
 
-    let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
-    if !is_member {
+    if !check_user_in_event(&state.db_pool, event.event_id, user.user_id).await? {
         return Err(AppError::UserNotInEvent("User not in event".to_string()));
     }
 
-    match vote_on_poll(&state.db_pool, path.module_id, user.user_id, payload.option_indexes).await {
-        Ok(true) => {},
-        Ok(false) => return Err(AppError::BadRequest("Poll or options not found".to_string())),
-        Err(e) => return Err(AppError::Internal(format!("Failed to vote on poll: {}", e))),
-    };
+    let poll_belongs = verify_poll_in_event(&state.db_pool, path.module_id, path.event_id).await?;
+    if !poll_belongs {
+        return Err(AppError::Forbidden("Poll not in this event".to_string()));
+    }
 
-    Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
+    println!("🔍 Voting: poll_id={}, user_id={}, indexes={:?}", path.module_id, user.user_id, payload.option_indexes);
+
+    vote_on_poll(&state.db_pool, path.module_id, user.user_id, payload.option_indexes).await?;
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
+
+// ====================== Тесты ======================
 
 #[cfg(test)]
 mod tests {
@@ -219,10 +194,7 @@ mod tests {
     };
     use tower::ServiceExt;
     use std::sync::Arc;
-    use tokio::sync::{
-        Mutex, 
-        broadcast
-    };
+    use tokio::sync::{Mutex, broadcast};
     use serde_json::json;
     use chrono::Utc;
 
@@ -232,20 +204,12 @@ mod tests {
         user_store::UserStore,
         secrets::verification::VerificationStore,
         data_base::{
-            user_db::{
-                create_user_db, 
-                create_token,
-                find_user_by_id
-            },
-            event_db::{
-                create_event, 
-                add_member
-            },
+            user_db::{create_user_db, create_token, find_user_by_id},
+            event_db::{create_event, add_member},
         },
         permissions::EventPermissions,
     };
 
-    /// Создаёт пользователя с токеном и событие, добавляет пользователя в событие с указанными правами.
     async fn setup(perm: i32) -> (Router, Arc<AppState>, i64, String, i64) {
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "poll_user", "poll_user@test.com", "Poll User", &None, &None).await.unwrap();
@@ -265,7 +229,7 @@ mod tests {
             .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
             .route("/events/{event_id}/planning/poll/{module_id}", routing::put(update_poll_handler))
             .route("/events/{event_id}/planning/poll/{module_id}", routing::delete(delete_poll_handler))
-            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::post(vote_poll_handler))
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
             .with_state(state.clone());
 
         (app, state, event_id, token.to_string(), user_id)
@@ -309,7 +273,6 @@ mod tests {
         let token = "stranger_token";
         create_token(&pool, stranger_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
         let event_id = create_event(&pool, "Event", None, None, None, None, "#000".into()).await.unwrap();
-        // stranger не добавлен в событие
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             user_store: Arc::new(Mutex::new(UserStore::new())),
@@ -334,40 +297,44 @@ mod tests {
 
     // ----------------- vote poll -----------------
     async fn poll_with_voter() -> (Router, Arc<AppState>, i64, String, i64, i64) {
-        let pool = setup_test_db().await;
-        let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
-        let voter_id = create_user_db(&pool, "voter", "voter@test.com", "Voter", &None, &None).await.unwrap();
-        let token = "voter_token";
-        create_token(&pool, voter_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
-        let event_id = create_event(&pool, "Vote Event", None, None, None, None, "#000".into()).await.unwrap();
-        add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
-        add_member(&pool, voter_id, event_id, EventPermissions::MEMBER).await.unwrap();
-        let poll_id = create_poll(&pool, event_id, "Q".into(), creator_id, vec!["A".into(), "B".into()], false).await.unwrap();
+    let pool = setup_test_db().await;
+    let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
+    let voter_id = create_user_db(&pool, "voter", "voter@test.com", "Voter", &None, &None).await.unwrap();
+    let token = "voter_token";
+    create_token(&pool, voter_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+    let event_id = create_event(&pool, "Vote Event", None, None, None, None, "#000".into()).await.unwrap();
+    add_member(&pool, creator_id, event_id, EventPermissions::OWNER).await.unwrap();
+    add_member(&pool, voter_id, event_id, EventPermissions::MEMBER).await.unwrap();
+    let module_id = create_poll(&pool, event_id, "Q".into(), creator_id, vec!["A".into(), "B".into()], false).await.unwrap();
 
-        let state = Arc::new(AppState {
-            tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
-            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool,
-        });
-        let app = Router::new()
-            .route("/events/{event_id}/planning/poll/{poll_id}/vote", routing::post(vote_poll_handler))
-            .with_state(state.clone());
-        (app, state, event_id, token.to_string(), voter_id, poll_id)
-    }
+    let state = Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        user_store: Arc::new(Mutex::new(UserStore::new())),
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool,
+    });
+    let app = Router::new()
+        .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
+        .with_state(state.clone());
+    (app, state, event_id, token.to_string(), voter_id, module_id)
+}
 
     #[tokio::test]
     async fn vote_success() -> anyhow::Result<()> {
         let (app, _st, event_id, token, _voter, module_id) = poll_with_voter().await;
         let payload = json!({"option_indexes":[0]});
         let req = Request::builder()
-            .method("POST")
+            .method("PATCH")
             .uri(&format!("/events/{}/planning/poll/{}/vote", event_id, module_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let status = resp.status();
+        // временно выведем тело ответа для диагностики
+        let body_bytes = resp.into_body().collect().await?.to_bytes();
+        println!("🔍 vote_success status: {}, body: {}", status, String::from_utf8_lossy(&body_bytes));
+        assert_eq!(status, StatusCode::OK);
         Ok(())
     }
 
@@ -376,7 +343,7 @@ mod tests {
         let (app, _st, event_id, token, _voter, poll_id) = poll_with_voter().await;
         let payload = json!({"option_indexes":[5]});
         let req = Request::builder()
-            .method("POST")
+            .method("PATCH")
             .uri(&format!("/events/{}/planning/poll/{}/vote", event_id, poll_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
@@ -389,57 +356,37 @@ mod tests {
     #[tokio::test]
     async fn vote_not_in_event() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        
         let user_id = create_user_db(&pool, "vote_user", "vote_user@test.com", "Vote User", &None, &None).await.unwrap();
         let token = "vote_token";
         create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
-        
         let event_with_poll = create_event(&pool, "Event With Poll", None, None, None, None, "#000".into()).await.unwrap();
         add_member(&pool, user_id, event_with_poll, EventPermissions::OWNER).await.unwrap();
-        
         let module_id = create_poll(
-            &pool, 
-            event_with_poll, 
-            "Question".into(), 
-            user_id, 
-            vec!["A".into(), "B".into()], 
-            false
+            &pool, event_with_poll, "Question".into(), user_id,
+            vec!["A".into(), "B".into()], false
         ).await.unwrap();
-        
         let event_id = create_event(&pool, "Event Without Poll", None, None, None, None, "#111".into()).await.unwrap();
         add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
-        
-        let user_store = Arc::new(Mutex::new(UserStore::new()));
-        {
-            let mut store = user_store.lock().await;
-            let user = find_user_by_id(&pool, user_id).await?.unwrap();
-            store.users.insert(user_id, user.clone());
-            store.users_by_email.insert(user.email.clone(), user_id);
-            store.users_by_username.insert(user.username.clone(), user_id);
-        }
-        
+
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            user_store,
+            user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });
-        
         let app = Router::new()
-            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::post(vote_poll_handler))
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
             .with_state(state);
-        
+
         let payload = json!({"option_indexes":[0]});
         let req = Request::builder()
-            .method("POST")
+            .method("PATCH")
             .uri(&format!("/events/{}/planning/poll/{}/vote", event_id, module_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
-        
         let resp = app.oneshot(req).await?;
-        
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
         Ok(())
     }
 
@@ -449,7 +396,6 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Old Q".to_string(), user_id, vec!["A".into(),"B".into()], false).await?;
-
         let payload = json!({"question":"New Q"});
         let req = Request::builder()
             .method("PUT")
@@ -467,12 +413,10 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Q".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
-
         let member_id = create_user_db(&pool, "member_update", "member_update@test.com", "Member", &None, &None).await.unwrap();
         let member_token = "member_token";
         create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
         add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
-
         let payload = json!({"question":"Hack"});
         let req = Request::builder()
             .method("PUT")
@@ -491,7 +435,6 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Del".into(), user_id, vec!["A".into(),"B".into()], false).await.unwrap();
-
         let req = Request::builder()
             .method("DELETE")
             .uri(&format!("/events/{}/planning/poll/{}", event_id, module_id))
@@ -508,7 +451,6 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Del".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
-
         let member_id = create_user_db(&pool, "member_del", "member_del@test.com", "Member", &None, &None).await.unwrap();
         let member_token = "member_del_token";
         create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
@@ -527,14 +469,11 @@ mod tests {
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
         let status = resp.status();
-        
         let (_, body) = resp.into_parts();
         let bytes = body.collect().await?.to_bytes();
         let body_str = String::from_utf8_lossy(&bytes);
-        
         println!("🔍 Response status: {}", status);
         println!("🔍 Response body: {}", body_str);
-        
         assert_eq!(status, StatusCode::FORBIDDEN);
         Ok(())
     }

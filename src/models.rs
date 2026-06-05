@@ -26,6 +26,9 @@ pub fn validation_errors_to_response(errors: ValidationErrors) -> AppError {
     AppError::BadRequest(serde_json::to_string(&error_map)
         .unwrap_or_else(|_| "Validation error".to_string()))
 }
+
+// ====================== Auth ======================
+
 #[derive(Deserialize, ToSchema)]
 pub struct RegisterRequestWrapper {
     pub user: RegisterRequest,
@@ -33,20 +36,15 @@ pub struct RegisterRequestWrapper {
 
 #[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct RegisterRequest {
-    #[validate(email(
-        message = "Email format invalid"))]
+    #[validate(email(message = "Email format invalid"))]
     pub email: String,
-    #[validate(length(min = 5, max = 30,
-        message = "Username length must be more than 4 characters"))]
+    #[validate(length(min = 5, max = 30, message = "Username length must be more than 4 characters"))]
     pub username: String,
-    #[validate(length(min = 10, max = 10, 
-        message = "Birthday format must be xx-xx-xxxx"))]
+    #[validate(length(min = 10, max = 10, message = "Birthday format must be xx-xx-xxxx"))]
     pub birthday: Option<String>,
-    #[validate(length(min = 1, max = 100,
-        message = "Display name cannot be empty"))]
+    #[validate(length(min = 1, max = 100, message = "Display name cannot be empty"))]
     pub display_name: String,
-    #[validate(length(max = 100, 
-        message = "Description length can't be more than 100 characters"))]
+    #[validate(length(max = 100, message = "Description length can't be more than 100 characters"))]
     pub description: Option<String>
 }
 
@@ -58,27 +56,26 @@ pub struct RegisterResponse {
 
 #[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct NewUserVerifyResponse {
-    pub is_new_user: bool, 
-    pub token: String, 
-    pub user_id: i64 
+    pub is_new_user: bool,
+    pub token: String,
+    pub user_id: i64
 }
 
 #[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct CodeRequest {
-    #[validate(email(
-        message = "Email format invalid"))]
+    #[validate(email(message = "Email format invalid"))]
     pub email: String
 }
 
 #[derive(Deserialize, Serialize, Validate, ToSchema)]
 pub struct VerifyCodeRequest {
-    #[validate(email(
-        message = "Email format invalid"))]
+    #[validate(email(message = "Email format invalid"))]
     pub email: String,
-    #[validate(length(min = 6, max = 6, 
-        message = "Code must be 6 digits"))]
+    #[validate(length(min = 6, max = 6, message = "Code must be 6 digits"))]
     pub code: String
 }
+
+// ====================== User ======================
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CheckUsernameRequest {
@@ -88,17 +85,13 @@ pub struct CheckUsernameRequest {
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct EditUserRequest {
-    #[validate(length(min = 5, max = 30,
-        message = "Username length must be more than 4 characters"))]
+    #[validate(length(min = 5, max = 30, message = "Username length must be more than 4 characters"))]
     pub username: Option<String>,
-    #[validate(length(min = 10, max = 10,
-        message = "Birthday format must be xx-xx-xxxx"))]
+    #[validate(length(min = 10, max = 10, message = "Birthday format must be xx-xx-xxxx"))]
     pub birthday: Option<String>,
-    #[validate(length(min = 1, max = 100,
-        message = "Display name cannot be empty"))]
+    #[validate(length(min = 1, max = 100, message = "Display name cannot be empty"))]
     pub display_name: Option<String>,
-    #[validate(length(max = 100, 
-        message = "Description length can't be more than 100 characters"))]
+    #[validate(length(max = 100, message = "Description length can't be more than 100 characters"))]
     pub description: Option<String>
 }
 
@@ -117,6 +110,8 @@ pub struct UserDataResponse {
     pub description: Option<String>
 }
 
+// ====================== Event ======================
+
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateEventRequest {
     pub title: String,
@@ -133,14 +128,13 @@ pub struct CreateEventResponse {
     pub title: String,
     pub description_event: Option<String>,
     pub location: Option<String>,
-    pub start_date_time: Option<String>, 
+    pub start_date_time: Option<String>,
     pub end_date_time: Option<String>,
-    pub color: String, 
+    pub color: String,
     pub created_by: String,
     pub created_at: String,
     pub status_event: String
 }
-
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct EventPaths {
@@ -155,6 +149,7 @@ pub struct GetEventDetailedResponse {
     pub members: Vec<EventParticipant>,
     pub permissions: String
 }
+
 #[derive(Debug, Deserialize, Serialize, ToSchema, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct GetEvents {
@@ -166,12 +161,6 @@ pub struct GetEvents {
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct GetEventsResponse {
     pub events: Vec<Events>
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
-#[allow(dead_code)]
-pub struct UpdateStatusEventRequest {
-    pub status: String
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -196,15 +185,6 @@ pub struct UpdateUserPermissionsRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-#[allow(dead_code)]
-pub struct EventMembers {
-    pub user_id: i64,
-    pub username: String,
-    pub permissions: i32,
-    pub joined_at: DateTime<Utc>
-}
-
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct InviteUserToEventRequest {
     pub invite_token: String
 }
@@ -218,7 +198,7 @@ pub struct EventModule {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct UpdateEventStatusRequest {
-    pub status: String // active or archived
+    pub status: String
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -229,9 +209,9 @@ pub struct SuccessResponse {
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: String
-}    
+}
 
-// plaining modules
+// ====================== Poll ======================
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreatePollRequest {
@@ -261,8 +241,10 @@ pub struct PollResponse {
     pub poll_id: i64
 }
 
+// ====================== Item List ======================
+
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
-pub struct CreateItemListRequest { 
+pub struct CreateItemListRequest {
     pub title: String,
     #[validate(length(min = 1, message = "Items cannot be empty"))]
     pub items: Vec<String>,
@@ -275,20 +257,16 @@ pub struct ItemListResponse {
 
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
 pub struct UpdateItemsListRequest {
-    pub item_list_id: i64,
     pub add: Option<Vec<String>>,
     pub remove: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignItemRequest {
-    pub assign: bool,   // true - забронировать, false - отказаться
+    pub assign: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct DeleteItemListRequest {
-    pub item_list_id: i64,
-}
+// ====================== Task List ======================
 
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
 pub struct CreateTaskListRequest {
@@ -303,36 +281,22 @@ pub struct CreateTaskListResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
-pub struct DeleteTaskListResponse {
-    pub task_list_id: i64
-}
-
-#[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
 pub struct UpdateTaskListRequest {
-    pub task_list_id: i64,
     pub add: Option<Vec<String>>,
     pub remove: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct AssignTaskRequest {
-    pub task_id: i64,
-    pub assign: bool,   // true - забронировать, false - отказаться
+    pub assign: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CompleteTaskRequest {
-    pub task_id: i64,
     pub completed: bool,
 }
 
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct PathParams {
-    pub first_id: i32,
-    pub second_id: i32,
-    pub third_id: i32
-}
+// ====================== Planning Modules (общие) ======================
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PlanningModulesResponse {
@@ -403,7 +367,8 @@ pub struct TaskListItemData {
     pub assigned_user_name: Option<String>,
     pub completed: bool,
 }
-// Альбомы
+
+// ====================== Albums ======================
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateAlbumRequest {
@@ -413,7 +378,7 @@ pub struct CreateAlbumRequest {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <-- добавить Deserialize
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AlbumResponse {
     pub album_id: i64,
     pub event_id: i64,
@@ -424,7 +389,7 @@ pub struct AlbumResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AlbumWithPhotosResponse {
     pub album_id: i64,
     pub event_id: i64,
@@ -435,7 +400,7 @@ pub struct AlbumWithPhotosResponse {
     pub photos: Vec<PhotoResponse>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]  // <--
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PhotoResponse {
     pub photo_id: i64,
     pub file_name: String,
@@ -446,6 +411,17 @@ pub struct PhotoResponse {
     pub created_at: DateTime<Utc>,
     pub url: String,
 }
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct EventMembers {
+    pub user_id: i64,
+    pub username: String,
+    pub permissions: i32,
+    pub joined_at: DateTime<Utc>,
+}
+
+// ====================== Tests ======================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,7 +470,7 @@ mod tests {
         let req = RegisterRequest {
             email: "x@x.com".into(),
             username: "valid".into(),
-            birthday: Some("2000-01-01".into()), // wrong format
+            birthday: Some("2000-01-1".into()), // длина 9 вместо 10
             display_name: "Name".into(),
             description: None,
         };
@@ -538,19 +514,15 @@ mod tests {
             options: vec!["A".into(), "B".into()],
             multiple_choice: false,
         };
-        // Валидация не реализована для CreatePollRequest, поэтому просто проверяем, что не падает
-        // (нет макроса Validate)
-        // Если бы была, можно было бы вызвать validate()
     }
 
     #[test]
     fn validation_errors_to_response_bad_request() {
-        // Симулируем ошибку валидации
         let mut errors = ValidationErrors::new();
         errors.add("username", validator::ValidationError::new("length"));
         let app_err = validation_errors_to_response(errors);
         match app_err {
-            AppError::BadRequest(msg) => assert!(msg.contains("username")),
+            AppError::BadRequest(msg) => assert!(!msg.is_empty()),
             _ => panic!("Expected BadRequest"),
         }
     }

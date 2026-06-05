@@ -395,10 +395,9 @@ pub async fn has_permission(
         user_id
     )
     .fetch_optional(pool)
-    .await?
-    .is_some();
+    .await?;
 
-    Ok(row)
+    Ok(row.map_or(false, |r| r.has_perm.unwrap_or(false)))
 }
 
 pub async fn get_event_id_by_token(

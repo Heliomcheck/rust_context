@@ -307,7 +307,7 @@ pub async fn delete_event_handler(
     
     delete_event(&state.db_pool, event_id).await?;
     
-    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
@@ -1093,20 +1093,20 @@ mod tests {
     // -----------------------------------------------------------
     #[tokio::test]
     async fn delete_event_owner() -> anyhow::Result<()> {
-        let pool = setup_test_db().await;
-        let (eid, token, _) = setup_detailed(&pool).await;
-        let state = create_state(pool).await;
-        let app = app_with_routes(state);
+    let pool = setup_test_db().await;
+    let (eid, token, _) = setup_detailed(&pool).await;
+    let state = create_state(pool).await;
+    let app = app_with_routes(state);
 
-        let req = Request::builder()
-            .method("DELETE")
-            .uri(&format!("/events/{}", eid))
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())?;
-        let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-        Ok(())
-    }
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(&format!("/events/{}", eid))
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())?;
+    let resp = app.oneshot(req).await?;
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    Ok(())
+}
 
     #[tokio::test]
     async fn delete_event_not_owner() -> anyhow::Result<()> {

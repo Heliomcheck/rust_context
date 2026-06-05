@@ -177,50 +177,73 @@ pub async fn insert_photo(
 }
 
 // Мягкое удаление альбома (is_active = false)
-pub async fn deactivate_album(
+/// Полное удаление альбома: удаляет записи в БД и папку с фотографиями
+pub async fn delete_album(
     pool: &PgPool,
     album_id: i64,
+    event_id: i64,
 ) -> Result<(), AppError> {
+    // Удаляем записи в БД (каскадом удалятся album_photos)
     let result = sqlx::query!(
-        r#"
-        UPDATE albums
-        SET is_active = false, updated_at = NOW()
-        WHERE album_id = $1 AND is_active = true
-        RETURNING album_id
-        "#,
+        "DELETE FROM albums WHERE album_id = $1 AND event_id = $2 AND is_active = true",
         album_id,
+        event_id,
     )
-    .fetch_optional(pool)
+    .execute(pool)
     .await
     .map_err(AppError::DbError)?;
 
-    if result.is_none() {
+    if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Album not found".into()));
     }
+
+    // Удаляем папку с файлами альбома
+    let album_dir = crate::handlers::album::album_dir(event_id, album_id);
+    if album_dir.exists() {
+        tokio::fs::remove_dir_all(&album_dir).await.map_err(|e| {
+            tracing::error!("Failed to delete album directory: {}", e);
+            AppError::Internal("Failed to delete album files".into())
+        })?;
+    }
+
     Ok(())
 }
 
-// Мягкое удаление фото
-pub async fn deactivate_photo(
+/// Полное удаление фото: удаляет запись и файл
+pub async fn delete_photo(
     pool: &PgPool,
     photo_id: i64,
+    album_id: i64,
+    event_id: i64,
 ) -> Result<(), AppError> {
-    let result = sqlx::query!(
-        r#"
-        UPDATE album_photos
-        SET is_active = false
-        WHERE photo_id = $1 AND is_active = true
-        RETURNING photo_id
-        "#,
+    // Сначала получаем имя файла, чтобы знать, что удалять с диска
+    let row = sqlx::query!(
+        "SELECT file_name FROM album_photos WHERE photo_id = $1 AND is_active = true",
         photo_id,
     )
     .fetch_optional(pool)
     .await
+    .map_err(AppError::DbError)?
+    .ok_or(AppError::NotFound("Photo not found".into()))?;
+
+    // Удаляем запись
+    sqlx::query!(
+        "DELETE FROM album_photos WHERE photo_id = $1",
+        photo_id,
+    )
+    .execute(pool)
+    .await
     .map_err(AppError::DbError)?;
 
-    if result.is_none() {
-        return Err(AppError::NotFound("Photo not found".into()));
+    // Удаляем файл
+    let file_path = crate::handlers::album::album_dir(event_id, album_id).join(&row.file_name);
+    if file_path.exists() {
+        tokio::fs::remove_file(&file_path).await.map_err(|e| {
+            tracing::error!("Failed to delete photo file: {}", e);
+            AppError::Internal("Failed to delete photo file".into())
+        })?;
     }
+
     Ok(())
 }
 
@@ -353,21 +376,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_deactivate_album() -> Result<()> {
+    async fn test_delete_album() -> Result<()> {
         let (pool, user_id, event_id) = setup().await?;
         let album = create_album(&pool, event_id, "Del", None, user_id).await?;
-        deactivate_album(&pool, album.album_id).await?;
+        // Полное физическое удаление альбома
+        delete_album(&pool, album.album_id, event_id).await?;
         let albums = get_event_albums(&pool, event_id).await?;
         assert!(albums.is_empty());
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_deactivate_photo() -> Result<()> {
+    async fn test_delete_photo() -> Result<()> {
         let (pool, user_id, event_id) = setup().await?;
         let album = create_album(&pool, event_id, "Pics", None, user_id).await?;
         let photo = insert_photo(&pool, album.album_id, "temp", "o.jpg", "image/jpeg", 100, user_id).await?;
-        deactivate_photo(&pool, photo.photo_id).await?;
+        // Полное физическое удаление фото
+        delete_photo(&pool, photo.photo_id, album.album_id, event_id).await?;
         let photos = get_photos_by_album(&pool, album.album_id).await?;
         assert!(photos.is_empty());
         Ok(())

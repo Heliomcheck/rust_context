@@ -126,14 +126,12 @@ use crate::handlers::album::*;
             ItemListResponse,
             UpdateItemsListRequest,
             AssignItemRequest,
-            DeleteItemListRequest,
             // Task_list
             CreateTaskListRequest,
             UpdateTaskListRequest,
             AssignTaskRequest,
             CompleteTaskRequest,
             CreateTaskListResponse,
-            DeleteTaskListResponse,
             // Responses
             SuccessResponse,
             ErrorResponse,

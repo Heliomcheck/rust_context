@@ -2,10 +2,10 @@ use sqlx::PgPool;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::errors::AppError;
-
+use utoipa::ToSchema;
 // ============== СТРУКТУРЫ ДЛЯ ОТВЕТОВ ==============
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ItemListWithItems {
     pub item_list_id: i64,
     pub event_id: i64,
@@ -15,7 +15,7 @@ pub struct ItemListWithItems {
     pub items: Vec<ItemListItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ItemListItem {
     pub item_id: i64,
     pub item_text: String,
@@ -344,6 +344,21 @@ pub async fn get_event_item_lists(
     }
     
     Ok(result)
+}
+
+pub async fn verify_item_in_list(
+    pool: &PgPool,
+    item_id: i64,
+    item_list_id: i64,
+) -> Result<bool, AppError> {
+    let row = sqlx::query!(
+        "SELECT EXISTS(SELECT 1 FROM item_list_item WHERE item_id = $1 AND item_list_id = $2) as \"exists!\"",
+        item_id, item_list_id
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(AppError::DbError)?;
+    Ok(row.exists)
 }
 
 //test

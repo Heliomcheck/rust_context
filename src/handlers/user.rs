@@ -373,7 +373,7 @@ mod tests {
             .route("/user/edit", routing::post(update_user_data_handler))
             .route("/user/get_data", routing::get(get_user_data_handler))
             .route("/user/avatar", routing::post(upload_avatar_handler))
-            .route("/avatars/:user_id", routing::get(get_avatar_handler))
+            .route("/avatars/{user_id}", routing::get(get_avatar_handler))
             .with_state(state)
     }
 
@@ -481,6 +481,10 @@ mod tests {
         let (uid, _token) = new_user_and_token(&pool).await;
         let state = create_state(pool).await;
         let app = user_app(state);
+
+        // Удаляем возможную папку от предыдущих запусков
+        let user_dir = std::path::PathBuf::from("uploads/avatars").join(format!("user_{}", uid));
+        let _ = tokio::fs::remove_dir_all(&user_dir).await;
 
         let req = Request::builder()
             .method("GET")

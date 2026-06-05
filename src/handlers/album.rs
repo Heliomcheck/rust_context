@@ -24,7 +24,7 @@ use crate::structs::AppState;
 // ====================== Константы ======================
 const UPLOAD_BASE: &str = "uploads/events";
 
-fn album_dir(event_id: i64, album_id: i64) -> PathBuf {
+pub fn album_dir(event_id: i64, album_id: i64) -> PathBuf {
     PathBuf::from(UPLOAD_BASE)
         .join(event_id.to_string())
         .join("albums")
@@ -67,8 +67,9 @@ pub async fn create_album_handler(
         return Err(AppError::UserNotInEvent("User not in event".into()));
     }
 
+    // Упрощённые права: только владелец или админ
     let can_create = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
-        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::CREATE_ALBUM).await?;
+        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::ADMIN).await?;
     if !can_create {
         return Err(AppError::Forbidden("Not enough permissions to create album".into()));
     }
@@ -347,13 +348,14 @@ pub async fn delete_album_handler(
         return Err(AppError::UserNotInEvent("User not in event".into()));
     }
 
+    // Удалять альбом могут владелец или админ
     let can_delete = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
-        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::DELETE_ALBUM).await?;
+        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::ADMIN).await?;
     if !can_delete {
         return Err(AppError::Forbidden("Not enough permissions to delete album".into()));
     }
 
-    album_db::deactivate_album(&state.db_pool, album_id).await?;
+    album_db::delete_album(&state.db_pool, album_id, event_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -377,7 +379,7 @@ pub async fn delete_album_handler(
 pub async fn delete_photo_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, _album_id, photo_id)): Path<(i64, i64, i64)>,
+    Path((event_id, album_id, photo_id)): Path<(i64, i64, i64)>,
 ) -> Result<impl IntoResponse, AppError> {
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
@@ -385,8 +387,9 @@ pub async fn delete_photo_handler(
         return Err(AppError::UserNotInEvent("User not in event".into()));
     }
 
-    let can_delete = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
-        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::DELETE_PHOTO).await?;
+    // Удалять фото могут: владелец, админ или сам загрузивший
+    let is_owner_or_admin = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
+        || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::ADMIN).await?;
 
     let photo = sqlx::query!(
         "SELECT uploaded_by FROM album_photos WHERE photo_id = $1 AND is_active = true",
@@ -397,14 +400,15 @@ pub async fn delete_photo_handler(
     .map_err(AppError::DbError)?
     .ok_or(AppError::NotFound("Photo not found".into()))?;
 
-    if !can_delete && photo.uploaded_by != user.user_id {
+    if !is_owner_or_admin && photo.uploaded_by != user.user_id {
         return Err(AppError::Forbidden("Not enough permissions to delete this photo".into()));
     }
 
-    album_db::deactivate_photo(&state.db_pool, photo_id).await?;
+    album_db::delete_photo(&state.db_pool, photo_id, album_id, event_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ====================== Тесты ======================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -592,9 +596,14 @@ mod tests {
         let event_id = create_event(&pool, user_id).await?;
         let album = album_db::create_album(&pool, event_id, "Photo", None, user_id).await?;
         let photo = album_db::insert_photo(&pool, album.album_id, "1.jpg", "o.jpg", "image/jpeg", 10, user_id).await?;
+// Обновляем file_name на правильный формат и кладём файл с таким именем
+        let correct_name = format!("{}.jpg", photo.photo_id);
+        sqlx::query!("UPDATE album_photos SET file_name = $1 WHERE photo_id = $2", correct_name, photo.photo_id)
+            .execute(&pool)
+            .await?;
         let dir = album_dir(event_id, album.album_id);
         tokio::fs::create_dir_all(&dir).await?;
-        tokio::fs::write(dir.join("1.jpg"), b"test").await?;
+        tokio::fs::write(dir.join(&correct_name), b"test").await?;
 
         let app = Router::new()
             .route("/events/{event_id}/albums/{album_id}/photos/{photo_id}", routing::get(get_photo_handler))
