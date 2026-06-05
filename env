@@ -5,4 +5,10 @@ SMTP_USERNAME=example@test.ru
 SMTP_PASSWORD=fjoieqknvciusdf
 SMTP_SERVER=smtp.example.ru
 SMTP_PORT=587
-TTL_VERIFICATION_CODE=300  # in seconds
+
+SITE_URL=https://kruug.netlify.app
+
+TTL_VERIFY_CODE=300 # in seconds
+COOLDOWN_RESEND_CODE=15 # in minutes
+TTL_EVENT_INVITE_TOKEN=168 # in hours
+TTL_USER_TOKEN=30 # in days

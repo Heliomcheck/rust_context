@@ -23,6 +23,14 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
         .context("Port is not valid")?
         .parse::<u16>()
         .context("Port must be a number")?;
+    let ttl_verify_code = env::var("TTL_VERIFY_CODE")
+        .ok()
+        .and_then(|s|s.parse::<i64>().ok())
+        .unwrap_or(300); //default ttl
+    let cooldown_resend_code = env::var("COOLDOWN_RESEND_CODE")
+        .ok()
+        .and_then(|s|s.parse::<i64>().ok())
+        .unwrap_or(300); //default ttl
 
     let username_format = username.parse::<Mailbox>()
         .context("Invalid 'from' email")
@@ -34,11 +42,11 @@ pub async fn send_mail_verif_code(to_mail: &str, state: Arc<crate::AppState>) ->
     
     let mut store = state.verification_store.lock().await;
 
-    if !store.can_resend(to_mail, 30) {  // cooldown 30 сек
+    if !store.can_resend(to_mail, cooldown_resend_code) {
         return Err(anyhow::anyhow!("Too many requests. Wait before retry"));
     }
 
-    let code = store.create(to_mail, 15);
+    let code = store.create(to_mail, ttl_verify_code);
 
     let email = MessageBuilder::new() // creating message
         .from(username_format)

@@ -92,9 +92,14 @@ pub async fn register_handler(
             return Err(AppError::Internal("Database error for create user".to_string()));
         }
     };
+
+    let ttl_user_token = std::env::var("TTL_USER_TOKEN")
+        .ok()
+        .and_then(|s|s.parse::<i64>().ok())
+        .unwrap_or(30);
     
     let token = generator::Generator::new_session_token();
-    let expires_at = Utc::now() + chrono::Duration::days(30);
+    let expires_at = Utc::now() + chrono::Duration::days(ttl_user_token);
     
     if let Err(e) = create_token(&state.db_pool, user_id, &token, expires_at).await {
         tracing::error!("Failed to create token: {}", e);
@@ -184,8 +189,12 @@ pub async fn verify_code_handler(
     let token = match find_token_by_user_id(&state.db_pool, user.user_id).await {
         Ok(Some(t)) => t,
         Ok(None) => {
+            let ttl_user_token = std::env::var("TTL_USER_TOKEN")
+                .ok()
+                .and_then(|s|s.parse::<i64>().ok())
+                .unwrap_or(30);
             let new_token = uuid::Uuid::new_v4().to_string();
-            let expires_at = Utc::now() + chrono::Duration::days(30);
+            let expires_at = Utc::now() + chrono::Duration::days(ttl_user_token);
             
             if let Err(e) = create_token(&state.db_pool, user.user_id, &new_token, expires_at).await {
                 tracing::error!("Failed to create token: {}", e);
@@ -468,7 +477,6 @@ mod tests {
         ).await?;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool
         });
@@ -510,7 +518,6 @@ mod tests {
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(verification)),
             db_pool: pool,
         });
@@ -541,7 +548,6 @@ mod tests {
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });

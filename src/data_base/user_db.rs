@@ -293,22 +293,6 @@ pub async fn update_user_avatar(
     Ok(())
 }
 
-#[warn(dead_code)]
-pub async fn load_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> { // non tested
-    let users = sqlx::query_as::<_, User>(
-        r#"
-        SELECT user_id, username, email, display_name, birthday,
-               is_deleted, created_at, last_online_at, description_profile
-        FROM users
-        WHERE is_deleted = false
-        "#
-    )
-    .fetch_all(pool)
-    .await?;
-    
-    Ok(users)
-}
-
 pub async fn update_last_online(pool: &PgPool, user_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -608,18 +592,6 @@ mod tests {
         assert_eq!(row.token, token.to_owned());
         assert_eq!(row.is_active, Some(true));
         assert!(row.expires_at > Utc::now());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_load_all_users() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
-        let pool = setup_test_db().await;
-        let email = "loadall@mail.com";
-        create_user_db(&pool, "loadall", email, "Load All", &None, &None).await?;
-        let users = load_all_users(&pool).await?;
-        assert!(!users.is_empty());
-        assert!(users.iter().any(|u| u.email == email));
         Ok(())
     }
 }

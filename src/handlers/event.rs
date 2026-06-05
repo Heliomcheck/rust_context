@@ -162,6 +162,7 @@ pub async fn get_detailed_event_handler(
     auth: TypedHeader<Authorization<Bearer>>,
     Path(event_id): Path<i64>
 ) -> Result<impl IntoResponse, AppError> {
+    dotenvy::dotenv().ok();
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
     let event = get_event_by_id(&state.db_pool, event_id).await?;
@@ -187,8 +188,13 @@ pub async fn get_detailed_event_handler(
             
             let is_valid = is_event_token_valid(&state.db_pool, &invite_token).await?;
             
+            let ttl_expires_code = std::env::var("TTL_EVENT_INVITE_TOKEN")
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(168);
+
             let final_token = if !is_valid {
-                match create_event_token(&state.db_pool, event_id, 300).await {
+                match create_event_token(&state.db_pool, event_id, ttl_expires_code).await {
                     Ok(token) => token,
                     Err(e) => {
                         tracing::error!("Failed to create new token: {}", e);
@@ -198,8 +204,10 @@ pub async fn get_detailed_event_handler(
             } else {
                 invite_token
             };
+
+            let url_prefix = std::env::var("SITE_URL").unwrap_or_else(|_| "https://kruug.netlify.app".to_string());
             
-            let invite_link = format!("https://kruug.netlify.app/invite?token={}", final_token);
+            let invite_link = format!("{}//invite?token={}", url_prefix, final_token);
             
             Ok((StatusCode::OK, Json(json!(GetEventDetailedResponse {
                 event,
