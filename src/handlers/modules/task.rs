@@ -49,7 +49,7 @@ pub async fn create_task_list_handler(
         return Err(AppError::Forbidden("User not in event".to_string()));
     }
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?;
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to create task list".to_string()));
     }
@@ -250,7 +250,7 @@ pub async fn delete_task_list_handler(
         .ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 4).await?;
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to delete task list".to_string()));
     }
@@ -296,7 +296,6 @@ mod tests {
     };
 
     async fn setup(perm: i32) -> (Router, Arc<AppState>, i64, String, i64) {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "task_user", "task_user@test.com", "Task User", &None, &None).await.unwrap();
         let token = "task_token";
@@ -315,21 +314,29 @@ mod tests {
         (app, state, event_id, token.to_string(), user_id)
     }
 
+    // #[ignore = "test without db"]
+    // // TODO: refactor with adding db
     async fn create_task_list_and_get_ids(app: &Router, state: &Arc<AppState>, event_id: i64, token: &str) -> anyhow::Result<(i64, i64)> {
         let payload = json!({"title":"Tasks","items":["task1"]});
         let req = Request::builder()
             .method("POST")
-            .uri(&format!("/events/{}/planning/tasks", event_id))
+            .uri(&format!("/events/{}/planning/task_list", event_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.clone().oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::CREATED);
-        let body_bytes = resp.into_body().collect().await?.to_bytes();
-        let created: CreateTaskListResponse = serde_json::from_slice(&body_bytes)?;
-        let tasks = sqlx::query!("SELECT task_id FROM task_list_item WHERE task_list_id = $1", created.task_list_id)
+        
+        anyhow::ensure!(resp.status().is_success(), "Create failed with status: {}", resp.status());
+        
+        let lists = get_event_task_lists(&state.db_pool, event_id).await?;
+        let task_list = lists.last().ok_or_else(|| anyhow::anyhow!("No task lists found"))?;
+        let task_list_id = task_list.task_list_id;
+        
+        let tasks = sqlx::query!("SELECT task_id FROM task_list_item WHERE task_list_id = $1", task_list_id)
             .fetch_all(&state.db_pool).await?;
-        Ok((created.task_list_id, tasks[0].task_id))
+        anyhow::ensure!(!tasks.is_empty(), "No tasks found");
+        
+        Ok((task_list_id, tasks[0].task_id))
     }
 
     // ----------------- create -----------------
@@ -339,12 +346,12 @@ mod tests {
         let payload = json!({"title":"To Do","items":["task1","task2"]});
         let req = Request::builder()
             .method("POST")
-            .uri(&format!("/events/{}/planning/tasks", event_id))
+            .uri(&format!("/events/{}/planning/task_list", event_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::CREATED);
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 
@@ -354,7 +361,7 @@ mod tests {
         let payload = json!({"title":"To Do","items":["task"]});
         let req = Request::builder()
             .method("POST")
-            .uri(&format!("/events/{}/planning/tasks", event_id))
+            .uri(&format!("/events/{}/planning/task_list", event_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -370,8 +377,8 @@ mod tests {
         let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
         let payload = json!({"task_list_id": list_id, "task_id": task_id, "assign": true});
         let req = Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks/{}/items/{}/assign", event_id, list_id, task_id))
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -383,11 +390,11 @@ mod tests {
     #[tokio::test]
     async fn assign_task_already_assigned() -> anyhow::Result<()> {
         let (app, state, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
-        let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
-        let payload = json!({"task_list_id": list_id, "task_id": task_id, "assign": true});
+        let (module_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
+        let payload = json!({"task_list_id": module_id, "task_id": task_id, "assign": true});
         let req = || Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks/{}/items/{}/assign", event_id, list_id, task_id))
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, module_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string())).unwrap();
@@ -405,8 +412,8 @@ mod tests {
         // assign first
         let payload = json!({"task_list_id": list_id, "task_id": task_id, "assign": true});
         let req = Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks/{}/items/{}/assign", event_id, list_id, task_id))
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -414,8 +421,8 @@ mod tests {
 
         let complete_payload = json!({"task_list_id": list_id, "task_id": task_id, "completed": true});
         let req = Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks/{}/items/{}/complete", event_id, list_id, task_id))
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/complete", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(complete_payload.to_string()))?;
@@ -430,8 +437,8 @@ mod tests {
         let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
         let payload = json!({"task_list_id": list_id, "task_id": task_id, "completed": true});
         let req = Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks/{}/items/{}/complete", event_id, list_id, task_id))
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/complete", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -447,53 +454,39 @@ mod tests {
         let (list_id, _) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
         let req = Request::builder()
             .method("DELETE")
-            .uri(&format!("/events/{}/planning/tasks/{}", event_id, list_id))
+            .uri(&format!("/events/{}/planning/task_list/{}", event_id, list_id))
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 
     #[tokio::test]
     async fn delete_task_list_not_owner() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        let owner_id = create_user_db(&pool, "owner_task_del", "owner_task_del@test.com", "Owner", &None, &None).await.unwrap();
-        let member_id = create_user_db(&pool, "member_task_del", "member_task_del@test.com", "Member", &None, &None).await.unwrap();
+        let owner_id = create_user_db(&pool, "owner_task_del", "owner_task_del@test.com", "Owner", &None, &None).await?;
+        let member_id = create_user_db(&pool, "member_task_del", "member_task_del@test.com", "Member", &None, &None).await?;
         let owner_token = "owner_task_token";
         let member_token = "member_task_token";
-        create_token(&pool, owner_id, owner_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
-        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
-        let event_id = create_event(&pool, "Del Task Event", None, None, None, None, "#000".into()).await.unwrap();
-        add_member(&pool, owner_id, event_id, EventPermissions::OWNER).await.unwrap();
-        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
+        create_token(&pool, owner_id, owner_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        let event_id = create_event(&pool, "Del Task Event", None, None, None, None, "#000".into()).await?;
+        add_member(&pool, owner_id, event_id, EventPermissions::OWNER).await?;
+        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await?;
 
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
         });
         let app = create_app(state.clone()).await;
 
-        // создаём task list от owner
-        let create_payload = json!({"title":"Tasks","items":["task"]});
-        let create_req = Request::builder()
-            .method("POST")
-            .uri(&format!("/events/{}/planning/tasks", event_id))
-            .header("Authorization", format!("Bearer {}", owner_token))
-            .header("content-type", "application/json")
-            .body(Body::from(create_payload.to_string()))?;
-        let create_resp = Router::new()
-            .route("/events/:event_id/planning/tasks", routing::post(create_task_list_handler))
-            .with_state(state.clone())
-            .oneshot(create_req).await?;
-        let body_bytes = create_resp.into_body().collect().await?.to_bytes();
-        let created: CreateTaskListResponse = serde_json::from_slice(&body_bytes)?;
+        let (list_id, _) = create_task_list_and_get_ids(&app, &state, event_id, owner_token).await?;
 
         let req = Request::builder()
             .method("DELETE")
-            .uri(&format!("/events/{}/planning/tasks/{}", event_id, created.task_list_id))
+            .uri(&format!("/events/{}/planning/task_list/{}", event_id, list_id))
             .header("Authorization", format!("Bearer {}", member_token))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;

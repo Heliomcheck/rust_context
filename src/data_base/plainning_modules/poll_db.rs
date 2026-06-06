@@ -345,6 +345,28 @@ pub async fn get_poll_with_votes(
         own_vote,
     })
 }
+
+// TODO: make test for this function
+pub async fn verify_poll_in_event(
+    pool: &PgPool,
+    poll_id: i64,
+    event_id: i64,
+) -> Result<bool, AppError> {
+    let row = sqlx::query!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM poll
+            WHERE poll_id = $1 AND event_id = $2 AND is_active = true
+        ) as "exists!"
+        "#,
+        poll_id,
+        event_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.exists)
+}
 //test
 #[cfg(test)]
 mod tests {
@@ -357,7 +379,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_count_of_options_single_vote() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "testuser1", "test1@example.com", "Test User 1", &None, &None).await?;
         let event_id = create_event(&pool, "Test Event", None, None, None, Some("uiu".to_string()), "#123456".to_string()).await?;
@@ -371,7 +392,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_count_of_options_multiple_vote() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "testuser2", "test2@example.com", "Test User 2", &None, &None).await?;
         let event_id = create_event(&pool, "Test Event 2", None, None, None, Some("uiu".to_string()), "#123456".to_string()).await?;
@@ -385,7 +405,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_vote_on_poll() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let voter_id = create_user_db(&pool, "voter", "voter@example.com", "Voter", &None, &None).await?;
         let creator_id = create_user_db(&pool, "creator", "creator@example.com", "Creator", &None, &None).await?;
@@ -410,7 +429,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_poll() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "deleteuser", "delete@example.com", "Delete User", &None, &None).await?;
         let event_id = create_event(&pool, "Delete Event", None, None, None, Some("uiu".to_string()), "#123456".to_string()).await?;
@@ -428,7 +446,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_edit_poll_question() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "edituser", "edit@example.com", "Edit User", &None, &None).await?;
         let event_id = create_event(&pool, "Edit Event", None, None, None, Some("uiu".to_string()), "#123456".to_string()).await?;
@@ -446,7 +463,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_event_polls() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "eventpolls", "eventpolls@example.com", "Event Polls User", &None, &None).await?;
         let event_id = create_event(&pool, "Polls Event", None, None, None, Some("uiu".to_string()), "#123456".to_string()).await?;

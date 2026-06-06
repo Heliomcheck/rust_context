@@ -906,7 +906,6 @@ mod tests {
 
     #[tokio::test]
     async fn create_event_invalid_date() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_uid, token) = new_user_and_token(&pool, "creator2", "creator2@test.com", "token_creator2").await;
         let state = create_state(pool).await;
@@ -941,7 +940,6 @@ mod tests {
 
     #[tokio::test]
     async fn get_detailed_event_success() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
@@ -959,7 +957,6 @@ mod tests {
 
     #[tokio::test]
     async fn get_detailed_user_not_in_event() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_eid, _token, _uid) = setup_detailed(&pool).await;
         let (_, stranger_token) = new_user_and_token(&pool, "stranger", "stranger@test.com", "str_token").await;
@@ -979,7 +976,6 @@ mod tests {
 
     #[tokio::test]
     async fn get_detailed_event_not_found() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_, token) = new_user_and_token(&pool, "ghost", "ghost@test.com", "ghost_token").await;
         let state = create_state(pool).await;
@@ -1000,7 +996,6 @@ mod tests {
     // -----------------------------------------------------------
     #[tokio::test]
     async fn update_event_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
@@ -1020,7 +1015,6 @@ mod tests {
 
     #[tokio::test]
     async fn update_event_not_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, _, _) = setup_detailed(&pool).await;
         let (member_uid, member_token) = new_user_and_token(&pool, "member", "member@test.com", "member_token").await;
@@ -1045,7 +1039,6 @@ mod tests {
     // -----------------------------------------------------------
     #[tokio::test]
     async fn delete_event_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
@@ -1057,13 +1050,12 @@ mod tests {
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 
     #[tokio::test]
     async fn delete_event_not_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, _, _owner_uid) = setup_detailed(&pool).await;
         let (member_uid, member_token) = new_user_and_token(&pool, "mem2", "mem2@test.com", "mem2_token").await;
@@ -1086,7 +1078,6 @@ mod tests {
     // -----------------------------------------------------------
     #[tokio::test]
     async fn join_event_with_valid_token() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (owner_uid, _) = new_user_and_token(&pool, "owner_join", "owner_join@test.com", "owner_join_tok").await;
         let eid = new_event(&pool).await;
@@ -1097,10 +1088,10 @@ mod tests {
         let state = create_state(pool).await;
         let app = create_app(state.clone()).await;
 
-        let payload = json!({"event_id": eid, "invite_token": invite_token});
+        let payload = json!({"invite_token": invite_token});
         let req = Request::builder()
             .method("POST")
-            .uri(&format!("/events/{}/join", eid))
+            .uri("/events/join")
             .header("Authorization", format!("Bearer {}", joiner_token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -1111,17 +1102,15 @@ mod tests {
 
     #[tokio::test]
     async fn join_event_invalid_token() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (_, token) = new_user_and_token(&pool, "bad_joiner", "bad_joiner@test.com", "bad_join_tok").await;
-        let eid = new_event(&pool).await;
         let state = create_state(pool).await;
         let app = create_app(state.clone()).await;
 
-        let payload = json!({"event_id": eid, "invite_token": "fake_token"});
+        let payload = json!({"invite_token": "fake_token"});
         let req = Request::builder()
             .method("POST")
-            .uri(&format!("/events/{}/join", eid))
+            .uri("/events/join")
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -1135,7 +1124,6 @@ mod tests {
     // -----------------------------------------------------------
     #[tokio::test]
     async fn update_event_status_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
@@ -1155,7 +1143,6 @@ mod tests {
 
     #[tokio::test]
     async fn update_event_status_not_owner() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, _, _owner_uid) = setup_detailed(&pool).await;
         let (member_uid, member_token) = new_user_and_token(&pool, "status_mem", "stat_mem@test.com", "stat_mem_tok").await;
@@ -1177,7 +1164,6 @@ mod tests {
 
     #[tokio::test]
     async fn get_event_avatar_not_found() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, _token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
@@ -1185,7 +1171,7 @@ mod tests {
 
         let req = Request::builder()
             .method("GET")
-            .uri(&format!("/events/{}/avatar", eid))
+            .uri(&format!("/event-avatars/{}", eid))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -1194,7 +1180,6 @@ mod tests {
 
     #[tokio::test]
     async fn delete_event_avatar_no_permission() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let (eid, _, _owner_uid) = setup_detailed(&pool).await;
         let (member_uid, member_token) = new_user_and_token(&pool, "mem_avatar", "mem_avatar@test.com", "mem_av_tok").await;

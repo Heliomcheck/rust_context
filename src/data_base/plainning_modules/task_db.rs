@@ -393,7 +393,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_get_task_list() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "taskdbtest", "taskdb@mail.com", "User", &None, &None).await?;
         let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
@@ -409,7 +408,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_assign_and_complete_task() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "assigncomp", "assigncomp@mail.com", "User", &None, &None).await?;
         let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
@@ -435,7 +433,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_complete_task_not_assigned() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "compnotass", "compna@mail.com", "User", &None, &None).await?;
         let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
@@ -451,7 +448,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_task_list() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(&pool, "deltask", "deltask@mail.com", "User", &None, &None).await?;
         let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;

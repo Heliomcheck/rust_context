@@ -87,7 +87,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_mail_verif_code_cooldown_logic() {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,

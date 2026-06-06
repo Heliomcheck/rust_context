@@ -363,7 +363,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_handler() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
 
         sqlx::query!("DELETE FROM token_store").execute(&pool).await?;
@@ -402,7 +401,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_token_validate_handler_invalid() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -425,7 +423,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_logout_handler_success() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let user_id = create_user_db(
             &pool,
@@ -465,7 +462,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_username_check_handler() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         create_user_db(
             &pool,
@@ -496,7 +492,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_code_new_user() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
 
         let email = "new@mail.com";
@@ -544,7 +539,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_code_invalid() -> anyhow::Result<()> {
-        let _guard = lock_db().await;
         let pool = setup_test_db().await;
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
