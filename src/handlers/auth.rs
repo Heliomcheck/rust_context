@@ -371,7 +371,8 @@ mod tests {
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
+            db_pool: pool,
+            config: Config::from_env()
         });
 
         let app = Router::new()
@@ -406,7 +407,8 @@ mod tests {
             tx: broadcast::channel(10).0,
             //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
+            db_pool: pool,
+            config: Config::from_env()
         });
         let app = Router::new()
             .route("/auth/token-validate", routing::post(token_validate_handler))
@@ -440,6 +442,7 @@ mod tests {
             //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool.clone(),
+            config: Config::from_env()
         });
 
         let app = Router::new()
@@ -474,7 +477,8 @@ mod tests {
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool
+            db_pool: pool,
+            config: Config::from_env()
         });
         let app = Router::new()
             .route("/auth/check-username", routing::post(username_check_handler))
@@ -515,6 +519,7 @@ mod tests {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(verification)),
             db_pool: pool,
+            config: Config::from_env()
         });
 
         let app = Router::new()
@@ -544,6 +549,7 @@ mod tests {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         });
         let app = Router::new()
             .route("/auth/verify-code", routing::post(verify_code_handler))

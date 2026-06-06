@@ -13,6 +13,7 @@ use crate::{
     secrets::verification::VerificationStore,
     models::EditUserRequest,
     permissions::*,
+    Config,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -105,7 +106,8 @@ pub struct AppState {
     pub tx: broadcast::Sender<ChatMessage>,
     //pub user_store: Arc<Mutex<UserStore>>,
     pub verification_store: Arc<Mutex<VerificationStore>>,
-    pub db_pool: PgPool
+    pub db_pool: PgPool,
+    pub config: Config,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

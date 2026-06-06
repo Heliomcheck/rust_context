@@ -13,6 +13,8 @@ use crate::{
     test_utils::*,
 };
 
+use crate::handlers::album::*;
+
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -35,7 +37,6 @@ use crate::{
         (name = "Avatar", description = "Avatar management"),
         (name = "Modules", description = "Modules management"),
         (name = "test_server", description = "Test server endpoints")
-        //(name = "Chat", description = "WebSocket chat")
     ),
     paths(
         request_code_handler,
@@ -81,6 +82,14 @@ use crate::{
         delete_task_list_handler,
 
         health_handler,
+
+        create_album_handler,
+        get_albums_handler,
+        get_album_handler,
+        upload_photo_handler,
+        get_photo_handler,
+        delete_album_handler,
+        delete_photo_handler,
     ),
     components(
         schemas(
@@ -117,22 +126,21 @@ use crate::{
             ItemListResponse,
             UpdateItemsListRequest,
             AssignItemRequest,
-            DeleteItemListRequest,
             // Task_list
             CreateTaskListRequest,
             UpdateTaskListRequest,
             AssignTaskRequest,
             CompleteTaskRequest,
             CreateTaskListResponse,
-            DeleteTaskListResponse,
             // Responses
             SuccessResponse,
             ErrorResponse,
-            // PollOption,
-            // VoteRequest,
-            // // Common
-            // ErrorResponse,
-            // SuccessResponse,
+
+            // Album
+            CreateAlbumRequest,
+            AlbumResponse,
+            AlbumWithPhotosResponse,
+            PhotoResponse,
         )
     ),
     security(

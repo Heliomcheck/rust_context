@@ -315,7 +315,7 @@ pub async fn delete_event_handler(
     
     delete_event(&state.db_pool, event_id).await?;
     
-    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
@@ -557,7 +557,7 @@ pub async fn event_join_handler(
     
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if is_member {
-        return Err(AppError::BadRequest("User already in event".to_string()));
+        return Err(AppError::Conflict);
     }
     
     add_member(&state.db_pool, user.user_id, event.event_id, EventPermissions::MEMBER).await?;
@@ -869,6 +869,7 @@ mod tests {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         })
     }
 

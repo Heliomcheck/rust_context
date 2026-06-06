@@ -525,6 +525,14 @@ pub async fn delete_event(
     // Коммитим транзакцию
     tx.commit().await?;
     
+    // Удаляем директорию события с аватарами и альбомами
+    let event_dir = std::path::PathBuf::from("uploads/events").join(event_id.to_string());
+    if event_dir.exists() {
+    tokio::fs::remove_dir_all(&event_dir).await.map_err(|e| {
+        tracing::error!("Failed to delete event directory {}: {}", event_id, e);
+        AppError::Internal("Failed to clean up event files".into())
+    })?;
+}
     Ok(())
 }
 

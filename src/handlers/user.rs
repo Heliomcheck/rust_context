@@ -369,6 +369,7 @@ mod tests {
             //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
+            config: Config::from_env()
         })
     }
 
@@ -487,6 +488,10 @@ mod tests {
         let (uid, _token) = new_user_and_token(&pool).await;
         let state = create_state(pool).await;
         let app = user_app(state);
+
+        // Удаляем возможную папку от предыдущих запусков
+        let user_dir = std::path::PathBuf::from("uploads/avatars").join(format!("user_{}", uid));
+        let _ = tokio::fs::remove_dir_all(&user_dir).await;
 
         let req = Request::builder()
             .method("GET")
