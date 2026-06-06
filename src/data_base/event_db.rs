@@ -177,7 +177,7 @@ pub async fn get_users_in_event(
         .map(|row| EventParticipant {
             user_id: row.user_id,
             display_name: row.name.unwrap_or_else(|| "Unknown".to_string()),
-            permissions: format!("{:b}", row.permissions),
+            permissions: format!("{:03b}", row.permissions),
         })
         .collect())
 }
