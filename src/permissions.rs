@@ -67,7 +67,7 @@ impl EventPermissions {
 
 pub async fn check_user_permissions(
     pool: &PgPool, 
-    event: &Events,
+    engrok config add-authtokenvent: &Events,
     user: &User,
     permission: i32
 ) -> Result<bool, AppError> {
