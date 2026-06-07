@@ -1,9 +1,9 @@
+# Этап сборки
 FROM rust:1.96-slim-bookworm AS builder
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
-    libssl3 \
     pkg-config \
     libssl-dev \
     ca-certificates \
@@ -36,5 +36,6 @@ COPY migrations /migrations
 
 RUN chmod +x /entrypoint.sh
 
+EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/usr/local/bin/Krug_server"]

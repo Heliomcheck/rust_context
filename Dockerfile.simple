@@ -1,0 +1,9 @@
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates libssl3 netcat-openbsd && rm -rf /var/lib/apt/lists/*
+COPY target/release/Krug_server /usr/local/bin/
+COPY entrypoint.sh /entrypoint.sh
+COPY migrations /migrations
+RUN chmod +x /entrypoint.sh
+EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/local/bin/Krug_server"]

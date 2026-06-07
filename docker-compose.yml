@@ -3,60 +3,34 @@ services:
     image: postgres:16-alpine
     container_name: rust_postgres
     restart: unless-stopped
-    ports:
-    - "5432:5432"
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - app_network
+      - rust_context_app_network
 
   krug:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: krug-local
     container_name: rust_app
     restart: unless-stopped
     ports:
-      - "80:3000"
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      DATABASE_URL_TEST: ${DATABASE_URL_TEST}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_SERVER: ${SMTP_SERVER}
-      SMTP_PORT: ${SMTP_PORT}
-      SITE_URL: ${SITE_URL}
-      TTL_VERIFY_CODE: ${TTL_VERIFY_CODE}
-      COOLDOWN_RESEND_CODE: ${COOLDOWN_RESEND_CODE}
-      TTL_EVENT_INVITE_TOKEN: ${TTL_EVENT_INVITE_TOKEN}
-      TTL_USER_TOKEN: ${TTL_USER_TOKEN}
-
-      SERVER_IP: ${SERVER_IP}
-      SERVER_PORT: ${SERVER_PORT}
-
-      RUST_LOG: info
-
-      BCRYPT_COST: 12
-      MAX_ALBUM_SIZE_MB: 50
-      MAX_PHOTOS_COUNT: 100
-      PHOTO_CACHE_MAX_AGE: 30
+      - "80:${SERVER_PORT:-8080}"
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - app_network
+      - rust_context_app_network
 
 networks:
-  app_network:
+  rust_context_app_network:
     driver: bridge
 
 volumes:
