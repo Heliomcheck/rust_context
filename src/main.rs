@@ -62,7 +62,6 @@ use crate::{
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv().ok();
-    let args: Vec<String> = std::env::args().collect();
 
     let database_url = std::env::var("DATABASE_URL")
         .context("DATABASE_URL not set")?;
@@ -75,11 +74,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
     let db_pool = create_pool(&database_url.as_str()).await?;
 
+    sqlx::migrate!().run(&db_pool).await?;
+
     let state = Arc::new(AppState {tx, verification_store, db_pool});
 
     let app = create_app(state).await;
     
-    let listner = TcpListener::bind(args[1].as_str()).await
+    let server_ip = std::env::var("SERVER_IP").unwrap_or_else(|_| "0.0.0.0".into());
+    let server_port = std::env::var("SERVER_PORT").unwrap_or_else(|_| "8080".into());
+    let address = format!("{}:{}", server_ip, server_port);
+    let listner = TcpListener::bind(&address).await
         .context("Can't bind to address")?;
 
     println!("Server was start");
