@@ -36,6 +36,7 @@ fn photo_url(event_id: i64, album_id: i64, photo_id: i64) -> String {
     format!("/events/{}/albums/{}/photos/{}", event_id, album_id, photo_id)
 }
 
+// ====================== 1. Создание альбома ======================
 #[utoipa::path(
     post,
     path = "/events/{event_id}/albums",
@@ -87,6 +88,7 @@ pub async fn create_album_handler(
     Ok((StatusCode::CREATED, Json(album)))
 }
 
+// ====================== 2. Список альбомов события ======================
 #[utoipa::path(
     get,
     path = "/events/{event_id}/albums",
@@ -328,7 +330,8 @@ pub async fn get_photo_handler(
     let mut response = (StatusCode::OK, data).into_response();
     response.headers_mut().insert(header::CONTENT_TYPE, mime.to_string().parse().unwrap());
     response.headers_mut().insert(header::ETAG, etag.parse().unwrap());
-    response.headers_mut().insert(header::CACHE_CONTROL, "public, max-age=3600".parse().unwrap());
+    let cache_value = format!("public, max-age={}", state.config.photo_cache_max_age);
+    response.headers_mut().insert(header::CACHE_CONTROL, cache_value.parse().unwrap());
 
     Ok(response)
 }
@@ -344,7 +347,7 @@ pub async fn get_photo_handler(
         ("album_id" = String, Path)
     ),
     responses(
-        (status = 204, description = "Album deleted"),
+        (status = 200, description = "Album deleted", body = SuccessResponse),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
     )
@@ -363,7 +366,6 @@ pub async fn delete_album_handler(
         return Err(AppError::UserNotInEvent("User not in event".into()));
     }
 
-    // Удалять альбом могут владелец или админ
     let can_delete = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
         || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::ADMIN).await?;
     if !can_delete {
@@ -371,7 +373,7 @@ pub async fn delete_album_handler(
     }
 
     album_db::delete_album(&state.db_pool, album_id, event_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 // ====================== 7. Удаление фото ======================
@@ -386,7 +388,7 @@ pub async fn delete_album_handler(
         ("photo_id" = String, Path)
     ),
     responses(
-        (status = 204, description = "Photo deleted"),
+        (status = 200, description = "Photo deleted", body = SuccessResponse),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
     )
@@ -406,7 +408,6 @@ pub async fn delete_photo_handler(
         return Err(AppError::UserNotInEvent("User not in event".into()));
     }
 
-    // Удалять фото могут: владелец, админ или сам загрузивший
     let is_owner_or_admin = event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?
         || event_db::has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::ADMIN).await?;
 
@@ -424,7 +425,7 @@ pub async fn delete_photo_handler(
     }
 
     album_db::delete_photo(&state.db_pool, photo_id, album_id, event_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 // ====================== Тесты ======================
@@ -446,13 +447,13 @@ mod tests {
     use crate::test_utils::setup_test_db;
 
     async fn create_test_state(pool: &sqlx::PgPool) -> Arc<AppState> {
-    Arc::new(AppState {
-        tx: broadcast::channel(10).0,
-        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-        db_pool: pool.clone(),
-        config: Config::from_env(),
-    })
-}
+        Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool.clone(),
+            config: Config::from_env(),
+        })
+    }
 
     async fn create_user_and_token(pool: &sqlx::PgPool, username: &str, email: &str) -> Result<(i64, String)> {
         let user_id = user_db::create_user_db(pool, username, email, "User", &None, &None).await?;
@@ -687,7 +688,10 @@ mod tests {
             .body(Body::empty())?;
 
         let response = app.oneshot(request).await?;
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await?.to_bytes();
+        let success: SuccessResponse = serde_json::from_slice(&body)?;
+        assert!(success.success);
 
         let albums = album_db::get_event_albums(&pool, event_id).await?;
         assert!(albums.is_empty());
@@ -717,10 +721,129 @@ mod tests {
             .body(Body::empty())?;
 
         let response = app.oneshot(request).await?;
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await?.to_bytes();
+        let success: SuccessResponse = serde_json::from_slice(&body)?;
+        assert!(success.success);
 
         let photos = album_db::get_photos_by_album(&pool, album.album_id).await?;
         assert!(photos.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_album_removes_directory() -> Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_test_state(&pool).await;
+        let (user_id, token) = create_user_and_token(&pool, "album_dir", "dir@test.com").await?;
+        let event_id = create_event(&pool, user_id).await?;
+        let album = album_db::create_album(&pool, event_id, "DirTest", None, user_id).await?;
+
+        let dir = album_dir(event_id, album.album_id);
+        tokio::fs::create_dir_all(&dir).await?;
+        assert!(dir.exists());
+
+        let app = Router::new()
+            .route("/events/{event_id}/albums/{album_id}", routing::delete(delete_album_handler))
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/events/{}/albums/{}", event_id, album.album_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())?;
+        let response = app.oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await?.to_bytes();
+        let success: SuccessResponse = serde_json::from_slice(&body)?;
+        assert!(success.success);
+        assert!(!dir.exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_photo_removes_file() -> Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_test_state(&pool).await;
+        let (user_id, token) = create_user_and_token(&pool, "photo_file", "photofile@test.com").await?;
+        let event_id = create_event(&pool, user_id).await?;
+        let album = album_db::create_album(&pool, event_id, "FileTest", None, user_id).await?;
+        let photo = album_db::insert_photo(&pool, album.album_id, "temp", "o.jpg", "image/jpeg", 10, user_id).await?;
+        let correct_name = format!("{}.jpg", photo.photo_id);
+        sqlx::query!("UPDATE album_photos SET file_name = $1 WHERE photo_id = $2", correct_name, photo.photo_id)
+            .execute(&pool).await?;
+        let dir = album_dir(event_id, album.album_id);
+        tokio::fs::create_dir_all(&dir).await?;
+        let file_path = dir.join(&correct_name);
+        tokio::fs::write(&file_path, b"test").await?;
+        assert!(file_path.exists());
+
+        let app = Router::new()
+            .route("/events/{event_id}/albums/{album_id}/photos/{photo_id}", routing::delete(delete_photo_handler))
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/events/{}/albums/{}/photos/{}", event_id, album.album_id, photo.photo_id))
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())?;
+        let response = app.oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await?.to_bytes();
+        let success: SuccessResponse = serde_json::from_slice(&body)?;
+        assert!(success.success);
+        assert!(!file_path.exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_create_album_invalid_event_id() -> Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_test_state(&pool).await;
+        let (_user_id, token) = create_user_and_token(&pool, "inval_id", "inval@test.com").await?;
+
+        let app = Router::new()
+            .route("/events/{event_id}/albums", routing::post(create_album_handler))
+            .with_state(state);
+
+        let payload = json!({ "title": "Test" });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/events/abc/albums") // невалидный event_id
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let response = app.oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete_photo_by_non_owner() -> Result<()> {
+        let pool = setup_test_db().await;
+        let state = create_test_state(&pool).await;
+        let (owner_id, _owner_token) = create_user_and_token(&pool, "owner_ph", "owner_ph@test.com").await?;
+        let (other_id, other_token) = create_user_and_token(&pool, "other_ph", "other_ph@test.com").await?;
+        let event_id = create_event(&pool, owner_id).await?;
+        event_db::add_member(&pool, other_id, event_id, EventPermissions::MEMBER).await?;
+
+        let album = album_db::create_album(&pool, event_id, "DelPhotoTest", None, owner_id).await?;
+        let photo = album_db::insert_photo(&pool, album.album_id, "temp", "o.jpg", "image/jpeg", 10, owner_id).await?;
+        let correct_name = format!("{}.jpg", photo.photo_id);
+        sqlx::query!("UPDATE album_photos SET file_name = $1 WHERE photo_id = $2", correct_name, photo.photo_id)
+            .execute(&pool).await?;
+
+        let app = Router::new()
+            .route("/events/{event_id}/albums/{album_id}/photos/{photo_id}", routing::delete(delete_photo_handler))
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/events/{}/albums/{}/photos/{}", event_id, album.album_id, photo.photo_id))
+            .header("Authorization", format!("Bearer {}", other_token))
+            .body(Body::empty())?;
+        let response = app.oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
         Ok(())
     }
 }

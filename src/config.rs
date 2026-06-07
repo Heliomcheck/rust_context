@@ -15,6 +15,7 @@ pub struct Config {
     pub smtp_port: u16,
     pub smtp_username: String,
     pub smtp_password: String,
+    pub photo_cache_max_age: u32,
 }
 
 impl Config {
@@ -33,6 +34,10 @@ impl Config {
             smtp_port: env::var("SMTP_PORT").unwrap_or_else(|_| "587".to_string()).parse().expect("SMTP_PORT must be a number"),
             smtp_username: env::var("SMTP_USERNAME").expect("SMTP_USERNAME not set"),
             smtp_password: env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD not set"),
+            photo_cache_max_age: env::var("PHOTO_CACHE_MAX_AGE")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .expect("PHOTO_CACHE_MAX_AGE must be a number"),
         }
     }
 }

@@ -208,6 +208,7 @@ pub async fn upload_avatar_handler(
     )
 )]
 pub async fn get_avatar_handler(
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(user_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -257,9 +258,10 @@ pub async fn get_avatar_handler(
         header::ETAG,
         current_etag.parse().unwrap(),
     );
+    let cache_value = format!("public, max-age={}", state.config.photo_cache_max_age);
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        "public, max-age=3600".parse().unwrap(),
+        cache_value.parse().unwrap(),
     );
     
     Ok(response)
