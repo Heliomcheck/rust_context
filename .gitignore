@@ -1,6 +1,5 @@
 /target
 /logs
-Cargo.lock
 .env
 /uploads
 server.log
