@@ -457,4 +457,27 @@ mod tests {
         assert_eq!(updated.items[0].item_text, "item2");
         Ok(())
     }
+    #[tokio::test]
+    async fn test_unassign_item_by_non_assignee() -> anyhow::Result<()> {
+        let pool = setup_test_db().await;
+        let user1 = create_user_db(&pool, "item_user1", "item_user1@mail.com", "U1", &None, &None).await?;
+        let user2 = create_user_db(&pool, "item_user2", "item_user2@mail.com", "U2", &None, &None).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, None, "#123".to_string()).await?;
+        add_member(&pool, user1, event_id, EventPermissions::OWNER).await?;
+        add_member(&pool, user2, event_id, EventPermissions::MEMBER).await?;
+
+        let list = create_item_list(&pool, event_id, "List", &["item".to_string()], user1).await?;
+        let item_id = list.items[0].item_id;
+
+        // user1 бронирует
+        assign_item(&pool, item_id, user1, true).await?;
+        // user2 пытается снять бронь
+        let result = assign_item(&pool, item_id, user2, false).await;
+        assert!(result.is_err()); // BadRequest
+        // user1 может снять свою бронь
+        assign_item(&pool, item_id, user1, false).await?;
+        let list = get_item_list(&pool, list.item_list_id).await?.unwrap();
+        assert_eq!(list.items[0].assigned_user_id, None);
+        Ok(())
+    }
 }

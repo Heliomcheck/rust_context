@@ -448,4 +448,43 @@ mod tests{
         assert!(polls.iter().any(|p| p.question == "Poll 1"));
         assert!(polls.iter().any(|p| p.question == "Poll 2"));
     }
+    #[tokio::test]
+    async fn test_create_poll_max_options() {
+        let pool = setup_test_db().await;
+        let user_id = create_user_db(&pool, "maxopts", "maxopts@test.com", "User", &None, &None).await.unwrap();
+        let event_id = create_event(&pool, "Event", None, None, None, Some("r".into()), "#000".into()).await.unwrap();
+        add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
+
+        let options: Vec<String> = (1..=20).map(|i| format!("Option {}", i)).collect();
+        let poll_id = create_poll(&pool, event_id, "Many".into(), user_id, options.clone(), false).await.unwrap();
+        assert!(poll_id > 0);
+
+        // 21 опция – ошибка
+        let options_too_many: Vec<String> = (1..=21).map(|i| format!("Option {}", i)).collect();
+        let result = create_poll(&pool, event_id, "Too many".into(), user_id, options_too_many, false).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vote_on_poll_multiple_choice() {
+        let pool = setup_test_db().await;
+        let creator = create_user_db(&pool, "multi_creator", "multi_creator@test.com", "Creator", &None, &None).await.unwrap();
+        let voter = create_user_db(&pool, "multi_voter", "multi_voter@test.com", "Voter", &None, &None).await.unwrap();
+        let event_id = create_event(&pool, "Multi Vote Event", None, None, None, Some("room".into()), "#000".into()).await.unwrap();
+        add_member(&pool, creator, event_id, EventPermissions::OWNER).await.unwrap();
+        add_member(&pool, voter, event_id, EventPermissions::MEMBER).await.unwrap();
+
+        let poll_id = create_poll(&pool, event_id, "Choose many".into(), creator,
+            vec!["A".into(), "B".into(), "C".into()], true).await.unwrap();
+
+        // голосуем за 0 и 2
+        let result = vote_on_poll(&pool, poll_id, voter, vec![0, 2]).await.unwrap();
+        assert!(result);
+
+        let poll_data = get_poll_with_votes(&pool, poll_id, voter).await.unwrap();
+        assert_eq!(poll_data.votes_count[0], 1);
+        assert_eq!(poll_data.votes_count[1], 0);
+        assert_eq!(poll_data.votes_count[2], 1);
+        assert_eq!(poll_data.own_vote, vec![0, 2]);
+    }
 }

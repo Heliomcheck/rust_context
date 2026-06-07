@@ -241,7 +241,6 @@ pub async fn delete_task_list_handler(
 }
 
 // ====================== Тесты ======================
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,14 +250,14 @@ mod tests {
     use tokio::sync::{Mutex, broadcast};
     use serde_json::json;
     use chrono::Utc;
-    use crate::create_app;
+
     use crate::{
         config::Config,
         test_utils::setup_test_db,
         structs::AppState,
         secrets::verification::VerificationStore,
         data_base::{
-            user_db::{create_user_db, create_token, find_user_by_id},
+            user_db::{create_user_db, create_token},
             event_db::{create_event, add_member},
         },
         permissions::EventPermissions,
@@ -279,7 +278,13 @@ mod tests {
             config: Config::from_env(),
         });
 
-        let app = create_app(state.clone()).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}", routing::patch(update_task_list_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/assign", routing::patch(assign_task_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/complete", routing::patch(complete_task_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
+            .with_state(state.clone());
 
         (app, state, event_id, token.to_string(), user_id)
     }
@@ -293,17 +298,17 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.clone().oneshot(req).await?;
-        
+
         anyhow::ensure!(resp.status().is_success(), "Create failed with status: {}", resp.status());
-        
+
         let lists = get_event_task_lists(&state.db_pool, event_id).await?;
         let task_list = lists.last().ok_or_else(|| anyhow::anyhow!("No task lists found"))?;
         let task_list_id = task_list.task_list_id;
-        
+
         let tasks = sqlx::query!("SELECT task_id FROM task_list_item WHERE task_list_id = $1", task_list_id)
             .fetch_all(&state.db_pool).await?;
         anyhow::ensure!(!tasks.is_empty(), "No tasks found");
-        
+
         Ok((task_list_id, tasks[0].task_id))
     }
 
@@ -445,7 +450,10 @@ mod tests {
             db_pool: pool,
             config: Config::from_env(),
         });
-        let app = create_app(state.clone()).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}", routing::delete(delete_task_list_handler))
+            .with_state(state.clone());
 
         let (list_id, _) = create_task_list_and_get_ids(&app, &state, event_id, owner_token).await?;
 
@@ -456,6 +464,99 @@ mod tests {
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn assign_task_as_member() -> anyhow::Result<()> {
+        // Владелец создаёт список, участник назначает задачу
+        let pool = setup_test_db().await;
+        let owner_id = create_user_db(&pool, "owner_mem", "owner_mem@test.com", "Owner", &None, &None).await?;
+        let member_id = create_user_db(&pool, "member_mem", "member_mem@test.com", "Member", &None, &None).await?;
+        let owner_token = "owner_mem_token";
+        let member_token = "member_mem_token";
+        create_token(&pool, owner_id, owner_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, Some("Room".into()), "#000".into()).await?;
+        add_member(&pool, owner_id, event_id, EventPermissions::OWNER).await?;
+        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await?;
+
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+            config: Config::from_env(),
+        });
+        let app = Router::new()
+            .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/assign", routing::patch(assign_task_handler))
+            .with_state(state.clone());
+
+        // Владелец создаёт список
+        let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, owner_token).await?;
+
+        // Участник пытается назначить задачу
+        let payload = json!({"assign": true});
+        let req = Request::builder()
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/assign", event_id, list_id, task_id))
+            .header("Authorization", format!("Bearer {}", member_token))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))?;
+        let resp = app.oneshot(req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn complete_task_as_member() -> anyhow::Result<()> {
+        // Владелец создаёт список, участник назначает и завершает задачу
+        let pool = setup_test_db().await;
+        let owner_id = create_user_db(&pool, "owner_comp", "owner_comp@test.com", "Owner", &None, &None).await?;
+        let member_id = create_user_db(&pool, "member_comp", "member_comp@test.com", "Member", &None, &None).await?;
+        let owner_token = "owner_comp_token";
+        let member_token = "member_comp_token";
+        create_token(&pool, owner_id, owner_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await?;
+        let event_id = create_event(&pool, "Event", None, None, None, Some("Room".into()), "#000".into()).await?;
+        add_member(&pool, owner_id, event_id, EventPermissions::OWNER).await?;
+        add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await?;
+
+        let state = Arc::new(AppState {
+            tx: broadcast::channel(10).0,
+            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+            db_pool: pool,
+            config: Config::from_env(),
+        });
+        let app = Router::new()
+            .route("/events/{event_id}/planning/task_list", routing::post(create_task_list_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/assign", routing::patch(assign_task_handler))
+            .route("/events/{event_id}/planning/task_list/{module_id}/items/{task_id}/complete", routing::patch(complete_task_handler))
+            .with_state(state.clone());
+
+        // Владелец создаёт список
+        let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, owner_token).await?;
+
+        // Участник назначает задачу себе
+        let assign_payload = json!({"assign": true});
+        let assign_req = Request::builder()
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/assign", event_id, list_id, task_id))
+            .header("Authorization", format!("Bearer {}", member_token))
+            .header("content-type", "application/json")
+            .body(Body::from(assign_payload.to_string()))?;
+        let _ = app.clone().oneshot(assign_req).await?;
+
+        // Участник завершает задачу
+        let complete_payload = json!({"completed": true});
+        let complete_req = Request::builder()
+            .method("PATCH")
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/complete", event_id, list_id, task_id))
+            .header("Authorization", format!("Bearer {}", member_token))
+            .header("content-type", "application/json")
+            .body(Body::from(complete_payload.to_string()))?;
+        let resp = app.oneshot(complete_req).await?;
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 }
