@@ -20,9 +20,7 @@ services:
       - app_network
 
   krug:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: krug-local
     container_name: rust_app
     restart: unless-stopped
     ports:
