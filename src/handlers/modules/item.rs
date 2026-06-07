@@ -63,7 +63,7 @@ pub async fn create_item_list_handler(
     }
 
     let item_list = create_item_list(&state.db_pool, event_id, &payload.title, &payload.items, user_id).await?;
-    Ok((StatusCode::CREATED, Json(item_list)))
+    Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
 }
 
 #[utoipa::path(

@@ -66,7 +66,7 @@ pub async fn create_poll_handler(
         payload.options, payload.multiple_choice
     ).await?;
 
-    Ok((StatusCode::CREATED, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
 }
 
 #[utoipa::path(

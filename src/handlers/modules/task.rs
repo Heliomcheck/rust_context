@@ -54,7 +54,7 @@ pub async fn create_task_list_handler(
     }
 
     let task_list = create_task_list(&state.db_pool, event_id, &payload.title, &payload.items, user_id).await?;
-    Ok((StatusCode::CREATED, Json(task_list)))
+    Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
 }
 
 // ====================== 2. Обновление списка задач ======================
