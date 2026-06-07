@@ -85,11 +85,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let verification_store = Arc::new(Mutex::new(VerificationStore::new()));
     let db_pool = create_pool(&config.database_url.as_str()).await?;
 
+    sqlx::migrate!().run(&db_pool).await?;
+
     let state = Arc::new(AppState {tx, verification_store, db_pool, config});
 
     let app = create_app(state).await;
     
-    let listner = TcpListener::bind(args[1].as_str()).await
+    let server_ip = std::env::var("SERVER_IP").unwrap_or_else(|_| "0.0.0.0".into());
+    let server_port = std::env::var("SERVER_PORT").unwrap_or_else(|_| "8080".into());
+    let address = format!("{}:{}", server_ip, server_port);
+    let listner = TcpListener::bind(&address).await
         .context("Can't bind to address")?;
 
     println!("Server was start");
