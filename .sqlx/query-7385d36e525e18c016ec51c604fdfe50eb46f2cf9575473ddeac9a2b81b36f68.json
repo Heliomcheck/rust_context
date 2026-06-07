@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO task_list (event_id, title, created_by)\n        VALUES ($1, $2, $3)\n        RETURNING task_list_id, created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_list_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "task_list_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "7385d36e525e18c016ec51c604fdfe50eb46f2cf9575473ddeac9a2b81b36f68"
+}

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM task_list_item\n            WHERE task_id = ANY($1)\n                AND task_list_id = $2\n                AND assigned_user_id IS NULL\n            RETURNING task_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list_item",
+            "name": "task_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d43bccec1e7e533ba188de946e91629c672160c9ed2a86280c7082dc36239ba3"
+}

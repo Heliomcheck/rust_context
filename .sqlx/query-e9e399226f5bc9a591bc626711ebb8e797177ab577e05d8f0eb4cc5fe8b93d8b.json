@@ -1,0 +1,127 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.event_id, e.title, e.description_event, e.start_date_time, e.end_date_time, \n            e.status_event, e.created_at, e.color, e.location\n        FROM events e\n        JOIN event_user eu ON e.event_id = eu.event_id\n        WHERE eu.user_id = $1 AND e.status_event = $2\n        ORDER BY \n            CASE e.status_event\n                WHEN 'active' THEN 1\n                WHEN 'archived' THEN 2\n                ELSE 99\n            END ASC,\n            e.created_at DESC\n        LIMIT $3 OFFSET $4\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description_event",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "description_event"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "start_date_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "start_date_time"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "end_date_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "end_date_time"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status_event",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "status_event"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "color",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "location",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "location"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e9e399226f5bc9a591bc626711ebb8e797177ab577e05d8f0eb4cc5fe8b93d8b"
+}

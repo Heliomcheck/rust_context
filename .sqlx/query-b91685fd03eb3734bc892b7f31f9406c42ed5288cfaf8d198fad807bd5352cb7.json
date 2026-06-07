@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM poll_option\n        WHERE poll_id IN (SELECT poll_id FROM poll WHERE event_id = $1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b91685fd03eb3734bc892b7f31f9406c42ed5288cfaf8d198fad807bd5352cb7"
+}

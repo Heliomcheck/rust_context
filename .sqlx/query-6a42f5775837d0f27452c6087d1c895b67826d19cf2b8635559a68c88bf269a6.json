@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE item_list_item\n            SET assigned_user_id = NULL\n            WHERE item_id = $1 AND assigned_user_id = $2\n            RETURNING item_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list_item",
+            "name": "item_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6a42f5775837d0f27452c6087d1c895b67826d19cf2b8635559a68c88bf269a6"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO event_user (user_id, event_id, permissions)\n        VALUES ($1, $2, $3)\n        ON CONFLICT (user_id, event_id) DO UPDATE\n        SET permissions = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4ac95786ad9e7f6bf3deada219c201de1e1a1722a3d9821cd1947228f2c5faa3"
+}

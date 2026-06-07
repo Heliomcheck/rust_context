@@ -1,6 +1,6 @@
 [package]
-name = "rust_context"
-version = "0.3.0"
+name = "Krug_server"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
@@ -50,3 +50,7 @@ opt-level = 0
 debug = true
 lto = false
 codegen-units = 1
+
+[[bin]]
+name = "Krug_server"
+path = "src/main.rs"

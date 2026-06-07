@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pv.user_id, pv.option_id\n           FROM poll_votes pv\n           WHERE pv.poll_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "poll_votes",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "option_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "poll_votes",
+            "name": "option_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "25e0230a824fc7b7642ea9c920078539028e19f4a827c398325a77129485cb0c"
+}

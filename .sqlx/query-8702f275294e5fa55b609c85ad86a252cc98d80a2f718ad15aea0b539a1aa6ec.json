@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            u.user_id,\n            COALESCE(u.display_name, u.username) AS name,\n            eu.permissions\n        FROM event_user eu\n        JOIN users u ON eu.user_id = u.user_id\n        WHERE eu.event_id = $1\n        ORDER BY COALESCE(u.display_name, u.username) ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "permissions",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "event_user",
+            "name": "permissions"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "8702f275294e5fa55b609c85ad86a252cc98d80a2f718ad15aea0b539a1aa6ec"
+}

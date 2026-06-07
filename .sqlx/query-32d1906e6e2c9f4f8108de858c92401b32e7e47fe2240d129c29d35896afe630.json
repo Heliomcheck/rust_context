@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM task_list\n        WHERE task_list_id = $1 AND event_id = $2\n        RETURNING task_list_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_list_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "task_list_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "32d1906e6e2c9f4f8108de858c92401b32e7e47fe2240d129c29d35896afe630"
+}

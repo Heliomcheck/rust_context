@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM item_list\n        WHERE item_list_id = $1 AND event_id = $2\n        RETURNING item_list_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_list_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "item_list_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "966870bcc50192472d51c8048f1bc85c8aaa530e7fd79cb16d8f6b14ffb94358"
+}

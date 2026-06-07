@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            il.item_list_id,\n            il.title,\n            COALESCE(\n                json_agg(\n                    json_build_object(\n                        'item_id', ili.item_id,\n                        'item_text', ili.item_text,\n                        'assigned_user_id', ili.assigned_user_id,\n                        'assigned_user_name',\n                            CASE \n                                WHEN ili.assigned_user_id IS NOT NULL THEN \n                                    COALESCE(u.display_name, u.username)\n                                ELSE NULL\n                            END\n                    ) ORDER BY ili.item_id\n                ) FILTER (WHERE ili.item_id IS NOT NULL),\n                '[]'::json\n            ) as items\n        FROM item_list il\n        LEFT JOIN item_list_item ili ON il.item_list_id = ili.item_list_id\n        LEFT JOIN users u ON ili.assigned_user_id = u.user_id\n        WHERE il.event_id = $1 AND il.is_active = true\n        GROUP BY il.item_list_id\n        ORDER BY il.created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_list_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "item_list_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "items",
+        "type_info": "Json",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c3bbe71b5ecfad7ccb54c8f0717f61564825b7cafa195920737ff08ff1c96614"
+}

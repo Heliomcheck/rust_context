@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE task_list_item\n            SET assigned_user_id = $1, is_completed = false\n            WHERE task_id = $2 AND assigned_user_id IS NULL\n            RETURNING task_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list_item",
+            "name": "task_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "29b1155861d5b57e5776b187027cdd7db62a1314660540395269a90306b6c7ba"
+}

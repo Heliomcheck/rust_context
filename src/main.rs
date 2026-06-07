@@ -74,8 +74,6 @@ use crate::handlers::album::{
 async fn main() -> Result<(), anyhow::Error> {
     dotenvy::dotenv().ok();
     let config = Config::from_env();
-    
-    let args: Vec<String> = std::env::args().collect();
 
     let _guard = setup_logging();
 

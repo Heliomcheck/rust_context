@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM item_list_item\n            WHERE item_id = ANY($1)\n                AND item_list_id = $2\n                AND assigned_user_id IS NULL\n            RETURNING item_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list_item",
+            "name": "item_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "30b823801952cfef6706188c05bf5d4bb47c79c93ac538dca1403008b91ba5d9"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT event_token\n        FROM event_token\n        WHERE event_id = $1 AND expires_at > NOW()\n        ORDER BY created_at DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_token",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "event_token",
+            "name": "event_token"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b237b8165563b6549f52e04b25348f49ab26e56476068b16a6e3c9c6afa419c4"
+}

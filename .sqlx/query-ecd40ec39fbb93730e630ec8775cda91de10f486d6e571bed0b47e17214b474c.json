@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            tl.event_id,\n            tl.title,\n            tl.created_by,\n            tl.created_at,\n            COALESCE(\n                json_agg(\n                    json_build_object(\n                        'task_id', tli.task_id,\n                        'task_text', tli.task_text,\n                        'assigned_user_id', tli.assigned_user_id,\n                        'assigned_user_name',\n                            CASE \n                                WHEN tli.assigned_user_id IS NOT NULL THEN \n                                    COALESCE(u.display_name, u.username)\n                                ELSE NULL\n                            END,\n                        'is_completed', tli.is_completed\n                    ) ORDER BY tli.task_id\n                ) FILTER (WHERE tli.task_id IS NOT NULL),\n                '[]'::json\n            ) as tasks\n        FROM task_list tl\n        LEFT JOIN task_list_item tli ON tl.task_list_id = tli.task_list_id\n        LEFT JOIN users u ON tli.assigned_user_id = u.user_id\n        WHERE tl.task_list_id = $1 AND tl.is_active = true\n        GROUP BY tl.task_list_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_by",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "task_list",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tasks",
+        "type_info": "Json",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "ecd40ec39fbb93730e630ec8775cda91de10f486d6e571bed0b47e17214b474c"
+}

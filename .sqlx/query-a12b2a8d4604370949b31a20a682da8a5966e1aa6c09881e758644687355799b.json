@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT more_than_one_vote FROM poll WHERE poll_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "more_than_one_vote",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "poll",
+            "name": "more_than_one_vote"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a12b2a8d4604370949b31a20a682da8a5966e1aa6c09881e758644687355799b"
+}

@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO album_photos (album_id, file_name, original_name, mime_type, file_size, uploaded_by)\n           VALUES ($1, $2, $3, $4, $5, $6)\n           RETURNING photo_id, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "photo_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "photo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "6bb61dde4c2fef06f4d01e9b9d0d266a673ffba191748f7731516dfd5095c402"
+}

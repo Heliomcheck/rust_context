@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE poll SET question = $1 WHERE poll_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "42278fc0f8261d088ba4a81e5a58b5093126370d4b58e8b01aaa0efb74d6bb17"
+}

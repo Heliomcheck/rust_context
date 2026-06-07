@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT eu.permissions\n        FROM event_user eu\n        WHERE event_id = $1 and user_id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permissions",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "event_user",
+            "name": "permissions"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "342111d653189f2101330bb24372e3b5096b283cbabab5fabd716bfe0731315b"
+}

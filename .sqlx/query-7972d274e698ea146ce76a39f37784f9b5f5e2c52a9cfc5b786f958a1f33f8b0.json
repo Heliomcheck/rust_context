@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT u.user_id\n        FROM users u\n        JOIN event_user eu ON u.user_id = eu.user_id\n        WHERE eu.event_id = $1 AND (eu.permissions & $2) != 0\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7972d274e698ea146ce76a39f37784f9b5f5e2c52a9cfc5b786f958a1f33f8b0"
+}

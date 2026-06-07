@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO poll(event_id, question, created_by, more_than_one_vote)\n           VALUES ($1, $2, $3, $4)\n           RETURNING poll_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "poll_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "poll",
+            "name": "poll_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "331682a6d45fb68ae19d45312c597b2aeee388d2342a5164c3a091551b36d4ec"
+}

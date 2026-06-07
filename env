@@ -1,5 +1,9 @@
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/rust_context_db
+DATABASE_URL=postgres://myuser:mypassword@postgres:5432/mydb
 DATABASE_URL_TEST=postgres://postgres:postgres@localhost:5433/rust_context_test
+
+POSTGRES_USER=myuser
+POSTGRES_PASSWORD=mypassword
+POSTGRES_DB=mydb
 
 SMTP_USERNAME=example@test.ru
 SMTP_PASSWORD=fjoieqknvciusdf
@@ -8,10 +12,10 @@ SMTP_PORT=587
 
 SITE_URL=https://kruug.netlify.app
 
-TTL_VERIFY_CODE=300 # in seconds
-COOLDOWN_RESEND_CODE=15 # in minutes
-TTL_EVENT_INVITE_TOKEN=168 # in hours
-TTL_USER_TOKEN=30 # in days
+TTL_VERIFY_CODE=300
+COOLDOWN_RESEND_CODE=15
+TTL_EVENT_INVITE_TOKEN=168
+TTL_USER_TOKEN=30
 
 SERVER_IP=0.0.0.0
-SERVER_PORT=8080
+SERVER_PORT=3000

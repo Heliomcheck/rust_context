@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM albums WHERE album_id = $1 AND event_id = $2 AND is_active = true",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2d4a0ab44f64f4227bf0095d0f979683c98b51ef941da1b0b7dadc22c67e730"
+}

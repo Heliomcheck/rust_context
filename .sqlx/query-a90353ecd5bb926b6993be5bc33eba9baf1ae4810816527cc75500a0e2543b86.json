@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE events\n        SET status_event = $1\n        WHERE event_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a90353ecd5bb926b6993be5bc33eba9baf1ae4810816527cc75500a0e2543b86"
+}

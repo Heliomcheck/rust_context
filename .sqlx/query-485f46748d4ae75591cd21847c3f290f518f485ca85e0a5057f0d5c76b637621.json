@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE album_photos SET file_name = $1 WHERE photo_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "485f46748d4ae75591cd21847c3f290f518f485ca85e0a5057f0d5c76b637621"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE event_user\n        SET permissions = $1\n        WHERE user_id = $2 AND event_id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d059315986c9afda80787c8018a35f76c7feec88a07a0df8dcc7eedd6369d468"
+}

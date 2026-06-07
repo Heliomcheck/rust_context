@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT photo_id, file_name, original_name, mime_type, file_size, uploaded_by, created_at\n           FROM album_photos\n           WHERE album_id = $1 AND is_active = true\n           ORDER BY created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "photo_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "photo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "file_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "file_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "original_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "original_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mime_type",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "mime_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "file_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "file_size"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "uploaded_by",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "uploaded_by"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "album_photos",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "844a6ccff618300b4b02e8c4a014c17ff82a5f8650faa160f3621b094ae7f525"
+}

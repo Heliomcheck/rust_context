@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            il.event_id,\n            il.title,\n            il.created_by,\n            il.created_at,\n            COALESCE(\n                json_agg(\n                    json_build_object(\n                        'item_id', ili.item_id,\n                        'item_text', ili.item_text,\n                        'assigned_user_id', ili.assigned_user_id,\n                        'assigned_user_name',\n                            CASE \n                                WHEN ili.assigned_user_id IS NOT NULL THEN \n                                    COALESCE(u.display_name, u.username)\n                                ELSE NULL\n                            END\n                    ) ORDER BY ili.item_id\n                ) FILTER (WHERE ili.item_id IS NOT NULL),\n                '[]'::json\n            ) as items\n        FROM item_list il\n        LEFT JOIN item_list_item ili ON il.item_list_id = ili.item_list_id\n        LEFT JOIN users u ON ili.assigned_user_id = u.user_id\n        WHERE il.item_list_id = $1 AND il.is_active = true\n        GROUP BY il.item_list_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_by",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "item_list",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "items",
+        "type_info": "Json",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "6aa5867647821ad25c7b313296259cd15ae680fb22efc67970877470584365ce"
+}
