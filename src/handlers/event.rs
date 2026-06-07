@@ -146,7 +146,7 @@ pub async fn get_user_events_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 200, description = "Event details retrieved", body = GetEventDetailedResponse),
@@ -160,8 +160,9 @@ pub async fn get_user_events_handler(
 pub async fn get_detailed_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>
+    Path(event_id_str): Path<String>
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     dotenvy::dotenv().ok();
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
@@ -250,9 +251,10 @@ pub async fn get_detailed_event_handler(
 pub async fn update_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     Json(payload): Json<UpdateEventRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
     let event = get_event_by_id(&state.db_pool, event_id).await?;
@@ -292,7 +294,7 @@ pub async fn update_event_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 204, description = "Event deleted successfully"),
@@ -304,8 +306,9 @@ pub async fn update_event_handler(
 pub async fn delete_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
     let has_permission = has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?;
@@ -326,7 +329,7 @@ pub async fn delete_event_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 200, description = "Modules retrieved successfully", body = PlanningModulesResponse),
@@ -339,12 +342,11 @@ pub async fn delete_event_handler(
 pub async fn get_modules_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    // 1. Получаем пользователя из токена
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
-    // 2. Проверяем, что пользователь состоит в событии
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_in_event {
         return Err(AppError::Forbidden("User not in event".to_string()));
@@ -352,7 +354,6 @@ pub async fn get_modules_handler(
     
     let mut modules: Vec<PlanningModule> = Vec::new();
     
-    // 3. Получаем все опросы
     let polls = get_event_polls(&state.db_pool, event_id).await?;
     for poll in polls {
         let poll_data = get_poll_with_votes(&state.db_pool, poll.poll_id, user.user_id).await?;
@@ -370,7 +371,6 @@ pub async fn get_modules_handler(
         });
     }
     
-    // 4. Получаем все списки вещей
     let item_lists = get_event_item_lists(&state.db_pool, event_id).await?;
     for item_list in item_lists {
         let items: Vec<ItemListItemData> = item_list.items
@@ -390,7 +390,6 @@ pub async fn get_modules_handler(
         });
     }
     
-    // 5. Получаем все списки задач
     let task_lists = get_event_task_lists(&state.db_pool, event_id).await?;
     for task_list in task_lists {
         let tasks: Vec<TaskListItemData> = task_list.items
@@ -414,17 +413,18 @@ pub async fn get_modules_handler(
     Ok(Json(PlanningModulesResponse { modules }))
 }
 
+// Удаление пользователя из события (DELETE)
 #[utoipa::path(
-    post,
+    delete,
     path = "/events/{event_id}/members/{user_id}",
     tag = "Event",
     security(
         ("bearerAuth" = [])
     ),
     responses(
-        (status = 204, description = "User deleted from event", body = SuccessResponse),
+        (status = 204, description = "User deleted from event"),
         (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
+        (status = 403, description = "User doesn't have permission", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
@@ -432,12 +432,13 @@ pub async fn get_modules_handler(
 pub async fn delete_user_from_event_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(path): Path<EventPaths>
+    Path((event_id_str, user_id_str)): Path<(String, String)>
 ) -> Result<impl IntoResponse, AppError> {
-    // check user master
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let user_id_to_delete: i64 = user_id_str.parse().map_err(|_| AppError::BadRequest("Invalid user_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
-    let event = get_event_by_id(&state.db_pool, path.event_id).await?;
+    let event = get_event_by_id(&state.db_pool, event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user.user_id).await?;
     if !is_member {
@@ -449,8 +450,8 @@ pub async fn delete_user_from_event_handler(
         Ok(false) => return Err(AppError::UserNotInEvent("User doesn't have permission to delete member".to_string())),
         Err(e) => return Err(e),
     };
-    // chech user slave
-    let user_id_for_deleting = get_user_for_handler_from_id(&state.db_pool, path.user_id).await?;
+    
+    let user_id_for_deleting = get_user_for_handler_from_id(&state.db_pool, user_id_to_delete).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user_id_for_deleting.user_id).await?;
     if !is_member {
@@ -458,11 +459,12 @@ pub async fn delete_user_from_event_handler(
     }
     let _ = remove_member(&state.db_pool, user_id_for_deleting.user_id, event.event_id).await?;
 
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok(StatusCode::NO_CONTENT)
 }
 
+// Изменение прав участника (PATCH)
 #[utoipa::path(
-    post,
+    patch,
     path = "/events/{event_id}/members/{user_id}",
     tag = "Event",
     security(
@@ -470,9 +472,9 @@ pub async fn delete_user_from_event_handler(
     ),
     request_body = UpdateUserPermissionsRequest,
     responses(
-        (status = 204, description = "Updated user permissions", body = SuccessResponse),
+        (status = 204, description = "Updated user permissions"),
         (status = 400, description = "Bad request", body = ErrorResponse),
-        (status = 403, description = "User doesn't have permission to invite or not in event", body = ErrorResponse),
+        (status = 403, description = "User doesn't have permission", body = ErrorResponse),
         (status = 404, description = "User or event not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
@@ -480,15 +482,15 @@ pub async fn delete_user_from_event_handler(
 pub async fn update_user_permissions_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(path): Path<EventPaths>,
+    Path((event_id_str, user_id_str)): Path<(String, String)>,
     Json(payload): Json<UpdateUserPermissionsRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-
-    // for user who make request
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let target_user_id: i64 = user_id_str.parse().map_err(|_| AppError::BadRequest("Invalid user_id".into()))?;
 
     let user_master = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
-    let event = get_event_by_id(&state.db_pool, path.event_id).await?;
+    let event = get_event_by_id(&state.db_pool, event_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user_master.user_id).await?;
     if !is_member {
@@ -500,9 +502,7 @@ pub async fn update_user_permissions_handler(
         Err(e) => return Err(e),
     };
 
-    // for user for which need to change the rights
-
-    let user_slave = get_user_for_handler_from_id(&state.db_pool, payload.user_id).await?;
+    let user_slave = get_user_for_handler_from_id(&state.db_pool, target_user_id).await?;
 
     let is_member = check_user_in_event(&state.db_pool, event.event_id, user_slave.user_id).await?;
     if !is_member {
@@ -519,10 +519,9 @@ pub async fn update_user_permissions_handler(
         Err(_) => return Err(AppError::BadRequest("permissions must be number".to_string())),
     };
 
-    // edit permissions
     let _ = update_user_permissions(&state.db_pool, event.event_id, user_slave.user_id, new_permissions).await?;
 
-    Ok((StatusCode::NO_CONTENT, Json(json!({"success": true}))))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
@@ -573,7 +572,7 @@ pub async fn event_join_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     request_body = UpdateEventStatusRequest,
     responses(
@@ -587,9 +586,10 @@ pub async fn event_join_handler(
 pub async fn update_event_status_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     Json(payload): Json<UpdateEventStatusRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
@@ -654,7 +654,7 @@ async fn compute_event_avatar_etag(event_id: i64) -> Result<String, AppError> {
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 200, description = "Avatar uploaded successfully", body = SuccessResponse),
@@ -668,9 +668,10 @@ async fn compute_event_avatar_etag(event_id: i64) -> Result<String, AppError> {
 pub async fn upload_event_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
@@ -738,7 +739,7 @@ pub async fn upload_event_avatar_handler(
     path = "/events/{event_id}/avatar",
     tag = "Event",
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 200, description = "Get avatar successfully"),
@@ -749,8 +750,9 @@ pub async fn upload_event_avatar_handler(
 )]
 pub async fn get_event_avatar_handler(
     headers: HeaderMap,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let current_etag = compute_event_avatar_etag(event_id).await?;
     
     if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
@@ -809,7 +811,7 @@ pub async fn get_event_avatar_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("event_id" = i64, Path, description = "Event ID")
+        ("event_id" = String, Path, description = "Event ID")
     ),
     responses(
         (status = 200, description = "Avatar deleted successfully", body = SuccessResponse),
@@ -822,8 +824,9 @@ pub async fn get_event_avatar_handler(
 pub async fn delete_event_avatar_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     
     let has_permission = has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?;
@@ -844,6 +847,7 @@ pub async fn delete_event_avatar_handler(
     
     Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,7 +856,6 @@ mod tests {
         data_base::user_db::{create_user_db, create_token},
         data_base::event_db::{create_event, add_member},
         permissions::EventPermissions,
-        //user_store::UserStore,
         secrets::verification::VerificationStore,
     };
     use axum::{Router, body::Body, http::Request};
@@ -863,7 +866,6 @@ mod tests {
     use tokio::sync::Mutex;
     use serde_json::json;
 
-
     async fn create_state(pool: sqlx::PgPool) -> Arc<AppState> {
         Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -873,18 +875,40 @@ mod tests {
         })
     }
 
+    async fn new_user_and_token(pool: &sqlx::PgPool, name: &str, email: &str, token_str: &str) -> (i64, String) {
+        let uid = create_user_db(pool, name, email, name, &None, &None).await.unwrap();
+        create_token(pool, uid, token_str, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        (uid, token_str.to_string())
+    }
 
+    async fn new_event(pool: &sqlx::PgPool) -> i64 {
+        create_event(pool, "Test Event", Some("Desc".into()), None, None, Some("Room".into()), "#123456".into())
+            .await.unwrap()
+    }
+
+    fn app_with_routes(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/events", routing::post(create_event_handler))
+            .route("/events/{event_id}", routing::get(get_detailed_event_handler))
+            .route("/events/{event_id}", routing::put(update_event_handler))
+            .route("/events/{event_id}", routing::delete(delete_event_handler))
+            .route("/events/join", routing::post(event_join_handler))
+            .route("/events/{event_id}/status", routing::patch(update_event_status_handler))
+            .route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler))
+            .route("/events/{event_id}/avatar", routing::get(get_event_avatar_handler))
+            .route("/events/{event_id}/avatar", routing::delete(delete_event_avatar_handler))
+            .with_state(state)
+    }
+
+    // -----------------------------------------------------------
+    // create_event_handler
+    // -----------------------------------------------------------
     #[tokio::test]
     async fn create_event_success() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
-        let (_, token) = new_user_and_token(
-            &pool, 
-            "creator", 
-            "creator@test.com", 
-            "token_creator"
-        ).await;
+        let (_, token) = new_user_and_token(&pool, "creator", "creator@test.com", "token_creator").await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({
             "title": "Birthday",
@@ -910,7 +934,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (_uid, token) = new_user_and_token(&pool, "creator2", "creator2@test.com", "token_creator2").await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({
             "title": "Test",
@@ -944,7 +968,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("GET")
@@ -961,9 +985,9 @@ mod tests {
         let pool = setup_test_db().await;
         let (_eid, _token, _uid) = setup_detailed(&pool).await;
         let (_, stranger_token) = new_user_and_token(&pool, "stranger", "stranger@test.com", "str_token").await;
-        let eid2 = new_event(&pool).await; // stranger not added
+        let eid2 = new_event(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("GET")
@@ -980,7 +1004,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (_, token) = new_user_and_token(&pool, "ghost", "ghost@test.com", "ghost_token").await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("GET")
@@ -1000,7 +1024,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"title": "Updated title"});
         let req = Request::builder()
@@ -1021,7 +1045,7 @@ mod tests {
         let (member_uid, member_token) = new_user_and_token(&pool, "member", "member@test.com", "member_token").await;
         add_member(&pool, member_uid, eid, EventPermissions::MEMBER).await.unwrap();
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"title": "Hack"});
         let req = Request::builder()
@@ -1031,7 +1055,7 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::FORBIDDEN); // UserNotInEvent с сообщением о правах
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
         Ok(())
     }
 
@@ -1043,7 +1067,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("DELETE")
@@ -1051,7 +1075,7 @@ mod tests {
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         Ok(())
     }
 
@@ -1062,7 +1086,7 @@ mod tests {
         let (member_uid, member_token) = new_user_and_token(&pool, "mem2", "mem2@test.com", "mem2_token").await;
         add_member(&pool, member_uid, eid, EventPermissions::MEMBER).await.unwrap();
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("DELETE")
@@ -1087,7 +1111,7 @@ mod tests {
 
         let (_, joiner_token) = new_user_and_token(&pool, "joiner", "joiner@test.com", "joiner_tok").await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"invite_token": invite_token});
         let req = Request::builder()
@@ -1106,7 +1130,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (_, token) = new_user_and_token(&pool, "bad_joiner", "bad_joiner@test.com", "bad_join_tok").await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"invite_token": "fake_token"});
         let req = Request::builder()
@@ -1128,7 +1152,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (eid, token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"status": "archived"});
         let req = Request::builder()
@@ -1149,7 +1173,7 @@ mod tests {
         let (member_uid, member_token) = new_user_and_token(&pool, "status_mem", "stat_mem@test.com", "stat_mem_tok").await;
         add_member(&pool, member_uid, eid, EventPermissions::MEMBER).await.unwrap();
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let payload = json!({"status": "archived"});
         let req = Request::builder()
@@ -1168,7 +1192,7 @@ mod tests {
         let pool = setup_test_db().await;
         let (eid, _token, _) = setup_detailed(&pool).await;
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("GET")
@@ -1186,7 +1210,7 @@ mod tests {
         let (member_uid, member_token) = new_user_and_token(&pool, "mem_avatar", "mem_avatar@test.com", "mem_av_tok").await;
         add_member(&pool, member_uid, eid, EventPermissions::MEMBER).await.unwrap();
         let state = create_state(pool).await;
-        let app = create_app(state.clone()).await;
+        let app = app_with_routes(state);
 
         let req = Request::builder()
             .method("DELETE")

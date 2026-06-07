@@ -291,6 +291,28 @@ pub async fn verify_poll_in_event(
 
     Ok(row.exists)
 }
+
+#[allow(dead_code)]
+pub async fn get_count_of_options(
+    pool: &PgPool,
+    poll_id: i64
+) -> Result<i64, sqlx::Error> {
+    let poll_info = sqlx::query!(
+        "SELECT more_than_one_vote FROM poll WHERE poll_id = $1",
+        poll_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    match poll_info {
+        Some(info) => {
+            if info.more_than_one_vote { Ok(100) } else { Ok(1) }
+        },
+        None => Err(sqlx::Error::RowNotFound)
+    }
+}
+
+
 //test
 #[cfg(test)]
 mod tests{

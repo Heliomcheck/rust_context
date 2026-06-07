@@ -27,7 +27,6 @@ use crate::{
         user_db::*
     }
 };
-use crate::structs::*;
 
 #[utoipa::path(
     post,
@@ -45,9 +44,10 @@ use crate::structs::*;
 pub async fn create_item_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     Json(payload): Json<CreateItemListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -82,9 +82,11 @@ pub async fn create_item_list_handler(
 pub async fn update_item_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id)): Path<(i64, i64)>,
+    Path((event_id_str, module_id_str)): Path<(String, String)>,
     Json(payload): Json<UpdateItemsListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -131,9 +133,12 @@ pub async fn update_item_list_handler(
 pub async fn assign_item_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id, item_id)): Path<(i64, i64, i64)>,
+    Path((event_id_str, module_id_str, item_id_str)): Path<(String, String, String)>,
     Json(payload): Json<AssignItemRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
+    let item_id: i64 = item_id_str.parse().map_err(|_| AppError::BadRequest("Invalid item_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -148,7 +153,6 @@ pub async fn assign_item_handler(
         return Err(AppError::NotFound("Item list not found in this event".into()));
     }
 
-    // Проверяем, что элемент принадлежит этому списку
     if !verify_item_in_list(&state.db_pool, item_id, module_id).await? {
         return Err(AppError::NotFound("Item not found in this list".into()));
     }
@@ -173,8 +177,10 @@ pub async fn assign_item_handler(
 pub async fn delete_item_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id)): Path<(i64, i64)>,
+    Path((event_id_str, module_id_str)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;

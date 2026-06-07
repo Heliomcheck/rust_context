@@ -13,6 +13,8 @@ use crate::{
     errors::AppError,
     models::*,
     structs::*,
+    permissions::EventPermissions,
+    handlers::user::get_user_for_handler_from_token,
     *,
 };
 
@@ -33,9 +35,10 @@ use crate::{
 pub async fn create_task_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     Json(payload): Json<CreateTaskListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -71,9 +74,11 @@ pub async fn create_task_list_handler(
 pub async fn update_task_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id)): Path<(i64, i64)>,
+    Path((event_id_str, module_id_str)): Path<(String, String)>,
     Json(payload): Json<UpdateTaskListRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -83,7 +88,7 @@ pub async fn update_task_list_handler(
         return Err(AppError::Forbidden("User not in event".into()));
     }
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, 2).await?;
+    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to update task list".into()));
     }
@@ -121,9 +126,12 @@ pub async fn update_task_list_handler(
 pub async fn assign_task_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id, task_id)): Path<(i64, i64, i64)>,
+    Path((event_id_str, module_id_str, task_id_str)): Path<(String, String, String)>,
     Json(payload): Json<AssignTaskRequest>
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
+    let task_id: i64 = task_id_str.parse().map_err(|_| AppError::BadRequest("Invalid task_id".into()))?;
     let token = auth.token().to_string();
     let user = find_user_by_token(&state.db_pool, &token).await?.ok_or(AppError::Unauthorized)?;
     let user_id = user.user_id;
@@ -137,6 +145,10 @@ pub async fn assign_task_handler(
     if !belongs {
         return Err(AppError::NotFound("Task list not found in this event".into()));
     }
+
+    if !verify_task_in_list(&state.db_pool, task_id, module_id).await? {
+        return Err(AppError::NotFound("Task not found in this list".into()));
+    }
     
     assign_task(
         &state.db_pool,
@@ -146,11 +158,11 @@ pub async fn assign_task_handler(
     )
     .await?;
     
-    let _ = get_task_list(&state.db_pool, module_id)
+    let updated = get_task_list(&state.db_pool, module_id)
         .await?
         .ok_or(AppError::NotFound("Task list not found".to_string()))?;
     
-    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
+    Ok((StatusCode::OK, Json(updated)))
 }
 
 // ====================== 4. Отметка о выполнении задачи ======================
@@ -170,9 +182,12 @@ pub async fn assign_task_handler(
 pub async fn complete_task_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id, task_id)): Path<(i64, i64, i64)>,
+    Path((event_id_str, module_id_str, task_id_str)): Path<(String, String, String)>,
     Json(payload): Json<CompleteTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
+    let task_id: i64 = task_id_str.parse().map_err(|_| AppError::BadRequest("Invalid task_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
     let is_in_event = check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
@@ -210,11 +225,13 @@ pub async fn complete_task_handler(
 pub async fn delete_task_list_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, module_id)): Path<(i64, i64)>,
+    Path((event_id_str, module_id_str)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let module_id: i64 = module_id_str.parse().map_err(|_| AppError::BadRequest("Invalid module_id".into()))?;
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
 
-    let has_perm = has_permission(&state.db_pool, event_id, user_id, EventPermissions::OWNER).await?;
+    let has_perm = has_permission(&state.db_pool, event_id, user.user_id, EventPermissions::OWNER).await?;
     if !has_perm {
         return Err(AppError::Forbidden("No permission to delete task list".into()));
     }
@@ -234,7 +251,7 @@ mod tests {
     use tokio::sync::{Mutex, broadcast};
     use serde_json::json;
     use chrono::Utc;
-
+    use crate::create_app;
     use crate::{
         config::Config,
         test_utils::setup_test_db,
@@ -267,8 +284,6 @@ mod tests {
         (app, state, event_id, token.to_string(), user_id)
     }
 
-    // #[ignore = "test without db"]
-    // // TODO: refactor with adding db
     async fn create_task_list_and_get_ids(app: &Router, state: &Arc<AppState>, event_id: i64, token: &str) -> anyhow::Result<(i64, i64)> {
         let payload = json!({"title":"Tasks","items":["task1"]});
         let req = Request::builder()
@@ -292,7 +307,6 @@ mod tests {
         Ok((task_list_id, tasks[0].task_id))
     }
 
-    // ----------------- create -----------------
     #[tokio::test]
     async fn create_task_list_success() -> anyhow::Result<()> {
         let (app, _st, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
@@ -304,7 +318,7 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::CREATED);
         Ok(())
     }
 
@@ -323,7 +337,6 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- assign -----------------
     #[tokio::test]
     async fn assign_task_success() -> anyhow::Result<()> {
         let (app, state, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
@@ -331,7 +344,7 @@ mod tests {
         let payload = json!({"assign": true});
         let req = Request::builder()
             .method("PATCH")
-            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, list_id, task_id))
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/assign", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -344,10 +357,10 @@ mod tests {
     async fn assign_task_already_assigned() -> anyhow::Result<()> {
         let (app, state, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
         let (module_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
-        let payload = json!({"task_list_id": module_id, "task_id": task_id, "assign": true});
-        let req = || Request::builder()
+        let payload = json!({"assign": true});
+        let req_fn = || Request::builder()
             .method("PATCH")
-            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, module_id, task_id))
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/assign", event_id, module_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string())).unwrap();
@@ -357,25 +370,24 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- complete -----------------
     #[tokio::test]
     async fn complete_task_success() -> anyhow::Result<()> {
         let (app, state, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
         let (list_id, task_id) = create_task_list_and_get_ids(&app, &state, event_id, &token).await?;
         // assign first
-        let payload = json!({"task_list_id": list_id, "task_id": task_id, "assign": true});
-        let req = Request::builder()
+        let assign_payload = json!({"assign": true});
+        let assign_req = Request::builder()
             .method("PATCH")
-            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/assign", event_id, list_id, task_id))
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/assign", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(assign_payload.to_string()))?;
         let _ = app.clone().oneshot(assign_req).await?;
 
-        let complete_payload = json!({"task_list_id": list_id, "task_id": task_id, "completed": true});
-        let req = Request::builder()
+        let complete_payload = json!({"completed": true});
+        let complete_req = Request::builder()
             .method("PATCH")
-            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/complete", event_id, list_id, task_id))
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/complete", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(complete_payload.to_string()))?;
@@ -391,7 +403,7 @@ mod tests {
         let payload = json!({"completed": true});
         let req = Request::builder()
             .method("PATCH")
-            .uri(&format!("/events/{}/planning/task_list/{}/tasks/{}/complete", event_id, list_id, task_id))
+            .uri(&format!("/events/{}/planning/task_list/{}/items/{}/complete", event_id, list_id, task_id))
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
@@ -400,7 +412,6 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- delete -----------------
     #[tokio::test]
     async fn delete_task_list_owner() -> anyhow::Result<()> {
         let (app, state, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
@@ -411,7 +422,7 @@ mod tests {
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         Ok(())
     }
 

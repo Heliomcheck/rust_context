@@ -68,7 +68,6 @@ pub async fn update_user_data_handler(
         tracing::error!("Failed to update user: {}", e);
         (AppError::Internal("Failed to update user".to_string()));
     }
-    // update user data un UserStore in future
     
     Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
 }
@@ -154,14 +153,13 @@ pub async fn upload_avatar_handler(
             }
         };
         
-        let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user.user_id)); // create user dir
+        let user_dir = PathBuf::from(UPLOAD_DIR).join(format!("user_{}", user.user_id));
         
         if let Err(e) = fs::create_dir_all(&user_dir).await {
             error!("Failed to create user dir: {}", e);
             return Err(AppError::Internal("Failed to create user dir".to_string()));
         }
         
-        let _ = user_dir.join("avatar.*"); // delete old avatar
         if let Ok(mut entries) = fs::read_dir(&user_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let name = entry.file_name();
@@ -171,7 +169,7 @@ pub async fn upload_avatar_handler(
             }
         }
         
-        let new_name = format!("avatar.{}", ext); // save new avatar
+        let new_name = format!("avatar.{}", ext);
         let save_path = user_dir.join(&new_name);
         
         if let Err(e) = fs::write(&save_path, data).await {
@@ -199,7 +197,7 @@ pub async fn upload_avatar_handler(
         ("bearerAuth" = [])
     ),
     params(
-        ("user_id" = i64, Path, description = "User ID")
+        ("user_id" = String, Path, description = "User ID")
     ),
     responses(
         (status = 200, description = "Get avatar successfully"),
@@ -211,11 +209,11 @@ pub async fn upload_avatar_handler(
 )]
 pub async fn get_avatar_handler(
     headers: HeaderMap,
-    Path(user_id): Path<i64>,
+    Path(user_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    let user_id: i64 = user_id_str.parse().map_err(|_| AppError::BadRequest("Invalid user_id".into()))?;
     let current_etag = compute_avatar_etag(user_id).await?;
 
-    // Проверяем стандартный заголовок If-None-Match
     if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH) {
         if if_none_match.to_str().unwrap_or("") == current_etag {
             return Ok(StatusCode::NOT_MODIFIED.into_response());
@@ -250,7 +248,6 @@ pub async fn get_avatar_handler(
         AppError::Internal("Failed to read file".to_string())
     })?;
     
-    // Создаём response с заголовками
     let mut response = (StatusCode::OK, data).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -336,8 +333,6 @@ pub async fn get_user_for_handler_from_id(pool: &PgPool, user_id: i64) -> Result
     Ok(user)
 }
 
-//test
-
 #[cfg(test)]
 mod tests {
     use tokio::sync::{broadcast, Mutex};
@@ -347,15 +342,14 @@ mod tests {
     use tower::ServiceExt;
     use chrono::Utc;
     use crate::{
-        //user_store::*,
         secrets::verification::VerificationStore,
         data_base::user_db::*,
         test_utils::*,
         structs::*,
+        config::Config,
         *
     };
 
-    // ----------------- helpers -----------------
     async fn new_user_and_token(pool: &sqlx::PgPool) -> (i64, String) {
         let uid = create_user_db(pool, "testuser", "test@test.com", "Test", &None, &None).await.unwrap();
         let token = "usertoken";
@@ -366,7 +360,6 @@ mod tests {
     async fn create_state(pool: sqlx::PgPool) -> Arc<AppState> {
         Arc::new(AppState {
             tx: broadcast::channel(10).0,
-            //user_store: Arc::new(Mutex::new(UserStore::new())),
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
             config: Config::from_env()
@@ -382,7 +375,6 @@ mod tests {
             .with_state(state)
     }
 
-    // ----------------- get_user_data -----------------
     #[tokio::test]
     async fn get_user_data_success() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
@@ -415,7 +407,6 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- update_user_data -----------------
     #[tokio::test]
     async fn update_user_data_success() -> anyhow::Result<()> {
         let db_pool = setup_test_db().await;
@@ -455,7 +446,6 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- upload avatar -----------------
     #[tokio::test]
     async fn upload_avatar_success() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
@@ -479,9 +469,6 @@ mod tests {
         Ok(())
     }
 
-    // ----------------- get avatar -----------------
-    #[ignore]
-    // TODO: fix test (avatar must be not found)
     #[tokio::test]
     async fn get_avatar_not_found() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
@@ -489,7 +476,6 @@ mod tests {
         let state = create_state(pool).await;
         let app = user_app(state);
 
-        // Удаляем возможную папку от предыдущих запусков
         let user_dir = std::path::PathBuf::from("uploads/avatars").join(format!("user_{}", uid));
         let _ = tokio::fs::remove_dir_all(&user_dir).await;
 

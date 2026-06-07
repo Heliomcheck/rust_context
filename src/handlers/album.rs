@@ -41,7 +41,7 @@ fn photo_url(event_id: i64, album_id: i64, photo_id: i64) -> String {
     path = "/events/{event_id}/albums",
     tag = "Albums",
     security(("bearerAuth" = [])),
-    params(("event_id" = i64, Path, description = "Event ID")),
+    params(("event_id" = String, Path, description = "Event ID")),
     request_body = CreateAlbumRequest,
     responses(
         (status = 201, description = "Album created", body = AlbumResponse),
@@ -53,9 +53,11 @@ fn photo_url(event_id: i64, album_id: i64, photo_id: i64) -> String {
 pub async fn create_album_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
     Json(payload): Json<CreateAlbumRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+
     if let Err(errors) = payload.validate() {
         return Err(validation_errors_to_response(errors));
     }
@@ -90,7 +92,7 @@ pub async fn create_album_handler(
     path = "/events/{event_id}/albums",
     tag = "Albums",
     security(("bearerAuth" = [])),
-    params(("event_id" = i64, Path, description = "Event ID")),
+    params(("event_id" = String, Path, description = "Event ID")),
     responses(
         (status = 200, description = "List of albums", body = Vec<AlbumResponse>),
         (status = 403, description = "Forbidden"),
@@ -100,8 +102,10 @@ pub async fn create_album_handler(
 pub async fn get_albums_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path(event_id): Path<i64>,
+    Path(event_id_str): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -119,8 +123,8 @@ pub async fn get_albums_handler(
     tag = "Albums",
     security(("bearerAuth" = [])),
     params(
-        ("event_id" = i64, Path, description = "Event ID"),
-        ("album_id" = i64, Path, description = "Album ID")
+        ("event_id" = String, Path, description = "Event ID"),
+        ("album_id" = String, Path, description = "Album ID")
     ),
     responses(
         (status = 200, description = "Album with photos", body = AlbumWithPhotosResponse),
@@ -130,8 +134,11 @@ pub async fn get_albums_handler(
 pub async fn get_album_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, album_id)): Path<(i64, i64)>,
+    Path((event_id_str, album_id_str)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let album_id: i64 = album_id_str.parse().map_err(|_| AppError::BadRequest("Invalid album_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -158,8 +165,8 @@ pub async fn get_album_handler(
     tag = "Albums",
     security(("bearerAuth" = [])),
     params(
-        ("event_id" = i64, Path),
-        ("album_id" = i64, Path)
+        ("event_id" = String, Path),
+        ("album_id" = String, Path)
     ),
     request_body(content_type = "multipart/form-data"),
     responses(
@@ -171,9 +178,12 @@ pub async fn get_album_handler(
 pub async fn upload_photo_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, album_id)): Path<(i64, i64)>,
+    Path((event_id_str, album_id_str)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let album_id: i64 = album_id_str.parse().map_err(|_| AppError::BadRequest("Invalid album_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -260,9 +270,9 @@ pub async fn upload_photo_handler(
     tag = "Albums",
     security(("bearerAuth" = [])),
     params(
-        ("event_id" = i64, Path, description = "Event ID"),
-        ("album_id" = i64, Path, description = "Album ID"),
-        ("photo_id" = i64, Path, description = "Photo ID")
+        ("event_id" = String, Path, description = "Event ID"),
+        ("album_id" = String, Path, description = "Album ID"),
+        ("photo_id" = String, Path, description = "Photo ID")
     ),
     responses(
         (status = 200, description = "Photo file"),
@@ -275,8 +285,12 @@ pub async fn get_photo_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
     headers: HeaderMap,
-    Path((event_id, album_id, photo_id)): Path<(i64, i64, i64)>,
+    Path((event_id_str, album_id_str, photo_id_str)): Path<(String, String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let album_id: i64 = album_id_str.parse().map_err(|_| AppError::BadRequest("Invalid album_id".into()))?;
+    let photo_id: i64 = photo_id_str.parse().map_err(|_| AppError::BadRequest("Invalid photo_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -326,8 +340,8 @@ pub async fn get_photo_handler(
     tag = "Albums",
     security(("bearerAuth" = [])),
     params(
-        ("event_id" = i64, Path),
-        ("album_id" = i64, Path)
+        ("event_id" = String, Path),
+        ("album_id" = String, Path)
     ),
     responses(
         (status = 204, description = "Album deleted"),
@@ -338,8 +352,11 @@ pub async fn get_photo_handler(
 pub async fn delete_album_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, album_id)): Path<(i64, i64)>,
+    Path((event_id_str, album_id_str)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let album_id: i64 = album_id_str.parse().map_err(|_| AppError::BadRequest("Invalid album_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -364,9 +381,9 @@ pub async fn delete_album_handler(
     tag = "Albums",
     security(("bearerAuth" = [])),
     params(
-        ("event_id" = i64, Path),
-        ("album_id" = i64, Path),
-        ("photo_id" = i64, Path)
+        ("event_id" = String, Path),
+        ("album_id" = String, Path),
+        ("photo_id" = String, Path)
     ),
     responses(
         (status = 204, description = "Photo deleted"),
@@ -377,8 +394,12 @@ pub async fn delete_album_handler(
 pub async fn delete_photo_handler(
     State(state): State<Arc<AppState>>,
     auth: TypedHeader<Authorization<Bearer>>,
-    Path((event_id, album_id, photo_id)): Path<(i64, i64, i64)>,
+    Path((event_id_str, album_id_str, photo_id_str)): Path<(String, String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let event_id: i64 = event_id_str.parse().map_err(|_| AppError::BadRequest("Invalid event_id".into()))?;
+    let album_id: i64 = album_id_str.parse().map_err(|_| AppError::BadRequest("Invalid album_id".into()))?;
+    let photo_id: i64 = photo_id_str.parse().map_err(|_| AppError::BadRequest("Invalid photo_id".into()))?;
+
     let user = get_user_for_handler_from_token(&state.db_pool, auth.token()).await?;
     let is_member = event_db::check_user_in_event(&state.db_pool, event_id, user.user_id).await?;
     if !is_member {
@@ -422,18 +443,16 @@ mod tests {
     use crate::data_base::event_db;
     use crate::permissions::EventPermissions;
     use crate::secrets::verification::VerificationStore;
-    use crate::user_store::UserStore;
     use crate::test_utils::setup_test_db;
 
     async fn create_test_state(pool: &sqlx::PgPool) -> Arc<AppState> {
-        Arc::new(AppState {
-            tx: broadcast::channel(10).0,
-            user_store: Arc::new(Mutex::new(UserStore::new())),
-            verification_store: Arc::new(Mutex::new(VerificationStore::new())),
-            db_pool: pool.clone(),
-            config: Config::from_env()
-        })
-    }
+    Arc::new(AppState {
+        tx: broadcast::channel(10).0,
+        verification_store: Arc::new(Mutex::new(VerificationStore::new())),
+        db_pool: pool.clone(),
+        config: Config::from_env(),
+    })
+}
 
     async fn create_user_and_token(pool: &sqlx::PgPool, username: &str, email: &str) -> Result<(i64, String)> {
         let user_id = user_db::create_user_db(pool, username, email, "User", &None, &None).await?;
@@ -596,7 +615,7 @@ mod tests {
         let event_id = create_event(&pool, user_id).await?;
         let album = album_db::create_album(&pool, event_id, "Photo", None, user_id).await?;
         let photo = album_db::insert_photo(&pool, album.album_id, "1.jpg", "o.jpg", "image/jpeg", 10, user_id).await?;
-// Обновляем file_name на правильный формат и кладём файл с таким именем
+        // Обновляем file_name на правильный формат и кладём файл с таким именем
         let correct_name = format!("{}.jpg", photo.photo_id);
         sqlx::query!("UPDATE album_photos SET file_name = $1 WHERE photo_id = $2", correct_name, photo.photo_id)
             .execute(&pool)
