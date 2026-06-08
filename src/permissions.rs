@@ -1,6 +1,6 @@
 use serde::Serialize;
 use sqlx::PgPool;
-use utoipa::{ToSchema};
+use utoipa::ToSchema;
 use crate::{
     errors::AppError,
     structs::*
@@ -60,14 +60,15 @@ impl EventPermissions {
         self.bits &= !permission;
     }
 
+    /// Возвращает короткую бинарную строку без ведущих нулей, например "100" для OWNER
     pub fn to_binary_string_short(&self) -> String {
-        format!("{:03b}", self.bits)
+        format!("{:b}", self.bits)
     }
 }
 
 pub async fn check_user_permissions(
     pool: &PgPool, 
-    engrok config add-authtokenvent: &Events,
+    event: &Events,
     user: &User,
     permission: i32
 ) -> Result<bool, AppError> {

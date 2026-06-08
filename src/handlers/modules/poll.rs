@@ -29,6 +29,7 @@ use crate::{
 
 use crate::data_base::plainning_modules::poll_db::verify_poll_in_event;
 
+// ====================== 1. Создание опроса ======================
 #[utoipa::path(
     post,
     path = "/events/{event_id}/planning/poll",
@@ -36,7 +37,7 @@ use crate::data_base::plainning_modules::poll_db::verify_poll_in_event;
     security(("bearerAuth" = [])),
     request_body = CreatePollRequest,
     responses(
-        (status = 201, description = "Poll created", body = PollResponse),
+        (status = 201, description = "Poll created", body = SuccessResponse),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -66,9 +67,10 @@ pub async fn create_poll_handler(
         payload.options, payload.multiple_choice
     ).await?;
 
-    Ok((StatusCode::OK, Json(SuccessResponse{success: true})))
+    Ok((StatusCode::CREATED, Json(SuccessResponse { success: true })))
 }
 
+// ====================== 2. Обновление опроса ======================
 #[utoipa::path(
     put,
     path = "/events/{event_id}/planning/poll/{module_id}",
@@ -76,7 +78,7 @@ pub async fn create_poll_handler(
     security(("bearerAuth" = [])),
     request_body = UpdatePollRequest,
     responses(
-        (status = 200, description = "Poll updated"),
+        (status = 200, description = "Poll updated", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -111,16 +113,17 @@ pub async fn update_poll_handler(
     if !updated {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
-    Ok((StatusCode::OK, Json(json!({"success": true}))))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
+// ====================== 3. Удаление опроса ======================
 #[utoipa::path(
     delete,
     path = "/events/{event_id}/planning/poll/{module_id}",
     tag = "Modules",
     security(("bearerAuth" = [])),
     responses(
-        (status = 200, description = "Poll deleted"),
+        (status = 200, description = "Poll deleted", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -154,9 +157,10 @@ pub async fn delete_poll_handler(
     if !deleted {
         return Err(AppError::BadRequest("Poll not found".to_string()));
     }
-    Ok((StatusCode::OK, Json(SuccessResponse {success: true})))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
+// ====================== 4. Голосование ======================
 #[utoipa::path(
     patch,
     path = "/events/{event_id}/planning/poll/{module_id}/vote",
@@ -164,7 +168,7 @@ pub async fn delete_poll_handler(
     security(("bearerAuth" = [])),
     request_body = VotePollRequest,
     responses(
-        (status = 200, description = "Vote accepted"),
+        (status = 200, description = "Vote accepted", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -190,14 +194,12 @@ pub async fn vote_poll_handler(
         return Err(AppError::NotFound("Poll not found in this event".to_string()));
     }
 
-    match vote_on_poll(&state.db_pool, module_id, user.user_id, payload.option_indexes).await {
-        Ok(true) => {},
-        Ok(false) => return Err(AppError::BadRequest("Poll or options not found".to_string())),
-        Err(e) => return Err(e),
-    };
+    vote_on_poll(&state.db_pool, module_id, user.user_id, payload.option_indexes).await?;
 
     Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
+
+// ====================== Тесты ======================
 
 #[cfg(test)]
 mod tests {
@@ -213,7 +215,7 @@ mod tests {
     use tokio::sync::{Mutex, broadcast};
     use serde_json::json;
     use chrono::Utc;
-    use crate::create_app;
+
     use crate::{
         config::Config,
         test_utils::setup_test_db,
@@ -241,11 +243,17 @@ mod tests {
             config: Config::from_env(),
         });
 
-        let app = create_app(state.clone()).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
+            .route("/events/{event_id}/planning/poll/{module_id}", routing::put(update_poll_handler))
+            .route("/events/{event_id}/planning/poll/{module_id}", routing::delete(delete_poll_handler))
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
+            .with_state(state.clone());
 
         (app, state, event_id, token.to_string(), user_id)
     }
 
+    // ----------------- create poll -----------------
     #[tokio::test]
     async fn create_poll_success() -> anyhow::Result<()> {
         let (app, _st, event_id, token, _uid) = setup(EventPermissions::OWNER).await;
@@ -283,13 +291,16 @@ mod tests {
         let token = "stranger_token";
         create_token(&pool, stranger_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
         let event_id = create_event(&pool, "Event", None, None, None, None, "#000".into()).await.unwrap();
+        // stranger не добавлен в событие
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
             verification_store: Arc::new(Mutex::new(VerificationStore::new())),
             db_pool: pool,
             config: Config::from_env(),
         });
-        let app = create_app(state).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/poll", routing::post(create_poll_handler))
+            .with_state(state);
 
         let payload = json!({"title":"Poll","options":["A","B"],"multiple_choice":false});
         let req = Request::builder()
@@ -303,6 +314,7 @@ mod tests {
         Ok(()) 
     }
 
+    // ----------------- vote poll -----------------
     async fn poll_with_voter() -> (Router, Arc<AppState>, i64, String, i64, i64) {
         let pool = setup_test_db().await;
         let creator_id = create_user_db(&pool, "creator_vote", "creator_vote@test.com", "Creator", &None, &None).await.unwrap();
@@ -320,7 +332,9 @@ mod tests {
             db_pool: pool,
             config: Config::from_env(),
         });
-        let app = create_app(state.clone()).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
+            .with_state(state.clone());
         (app, state, event_id, token.to_string(), voter_id, module_id)
     }
 
@@ -357,17 +371,27 @@ mod tests {
     #[tokio::test]
     async fn vote_not_in_event() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
+        
         let user_id = create_user_db(&pool, "vote_user", "vote_user@test.com", "Vote User", &None, &None).await.unwrap();
         let token = "vote_token";
         create_token(&pool, user_id, token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
+        
         let event_with_poll = create_event(&pool, "Event With Poll", None, None, None, None, "#000".into()).await.unwrap();
         add_member(&pool, user_id, event_with_poll, EventPermissions::OWNER).await.unwrap();
+        
         let module_id = create_poll(
-            &pool, event_with_poll, "Question".into(), user_id,
-            vec!["A".into(), "B".into()], false
+            &pool, 
+            event_with_poll, 
+            "Question".into(), 
+            user_id, 
+            vec!["A".into(), "B".into()], 
+            false
         ).await.unwrap();
+        
         let event_id = create_event(&pool, "Event Without Poll", None, None, None, None, "#111".into()).await.unwrap();
         add_member(&pool, user_id, event_id, EventPermissions::OWNER).await.unwrap();
+        
+        
         
         let state = Arc::new(AppState {
             tx: broadcast::channel(10).0,
@@ -376,7 +400,9 @@ mod tests {
             config: Config::from_env(),
         });
         
-        let app = create_app(state).await;
+        let app = Router::new()
+            .route("/events/{event_id}/planning/poll/{module_id}/vote", routing::patch(vote_poll_handler))
+            .with_state(state);
         
         let payload = json!({"option_indexes":[0]});
         let req = Request::builder()
@@ -385,16 +411,20 @@ mod tests {
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
+        
         let resp = app.oneshot(req).await?;
+        
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
         Ok(())
     }
 
+    // ----------------- update poll -----------------
     #[tokio::test]
     async fn update_poll_owner() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Old Q".to_string(), user_id, vec!["A".into(),"B".into()], false).await?;
+
         let payload = json!({"question":"New Q"});
         let req = Request::builder()
             .method("PUT")
@@ -412,10 +442,12 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Q".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
         let member_id = create_user_db(&pool, "member_update", "member_update@test.com", "Member", &None, &None).await.unwrap();
         let member_token = "member_token";
         create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
         add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
+
         let payload = json!({"question":"Hack"});
         let req = Request::builder()
             .method("PUT")
@@ -428,11 +460,13 @@ mod tests {
         Ok(())
     }
 
+    // ----------------- delete poll -----------------
     #[tokio::test]
     async fn delete_poll_owner() -> anyhow::Result<()> {
         let pool = setup_test_db().await;
         let (app, _st, event_id, token, user_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Del".into(), user_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
         let req = Request::builder()
             .method("DELETE")
             .uri(&format!("/events/{}/planning/poll/{}", event_id, module_id))
@@ -449,10 +483,13 @@ mod tests {
         let pool = setup_test_db().await;
         let (app, _st, event_id, _token, owner_id) = setup(EventPermissions::OWNER).await;
         let module_id = create_poll(&pool, event_id, "Del".into(), owner_id, vec!["A".into(),"B".into()], false).await.unwrap();
+
         let member_id = create_user_db(&pool, "member_del", "member_del@test.com", "Member", &None, &None).await.unwrap();
         let member_token = "member_del_token";
         create_token(&pool, member_id, member_token, Utc::now() + chrono::Duration::hours(1)).await.unwrap();
         add_member(&pool, member_id, event_id, EventPermissions::MEMBER).await.unwrap();
+
+        
 
         let req = Request::builder()
             .method("DELETE")
@@ -461,11 +498,14 @@ mod tests {
             .body(Body::empty())?;
         let resp = app.oneshot(req).await?;
         let status = resp.status();
+        
         let (_, body) = resp.into_parts();
         let bytes = body.collect().await?.to_bytes();
         let body_str = String::from_utf8_lossy(&bytes);
+        
         println!("🔍 Response status: {}", status);
         println!("🔍 Response body: {}", body_str);
+        
         assert_eq!(status, StatusCode::FORBIDDEN);
         Ok(())
     }

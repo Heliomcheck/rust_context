@@ -69,6 +69,7 @@ use crate::handlers::album::{
     delete_album_handler,
     delete_photo_handler,
 };
+use axum::extract::DefaultBodyLimit;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -107,6 +108,7 @@ async fn main() -> Result<(), anyhow::Error> {
 async fn create_app(state: Arc<AppState>) -> Router {
     let app =Router::new()
         .merge(SwaggerUi::new("/swagger_ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .layer(DefaultBodyLimit::disable()) // 50 МБ
         .route("/auth/request_code", routing::post(request_code_handler))
         .route("/auth/verify_code", routing::post(verify_code_handler))
         .route("/auth/resend_code", routing::post(resend_code_handler)) //delete in future
@@ -132,8 +134,8 @@ async fn create_app(state: Arc<AppState>) -> Router {
 
         .route("/events", routing::get(get_user_events_handler)) // query required // status = ""/limit = 10/offset = 10
         .route("/events/join", routing::post(event_join_handler))
-        .route("/events/{event_id}/members/{user_id}", routing::post(delete_user_from_event_handler))
-        .route("/events/{event_id}/members/{user_id}", routing::put(update_user_permissions_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::delete(delete_user_from_event_handler))
+        .route("/events/{event_id}/members/{user_id}", routing::patch(update_user_permissions_handler))
 
         .route("/events/{event_id}/avatar", routing::post(upload_event_avatar_handler))
         .route("/event-avatars/{event_id}", routing::get(get_event_avatar_handler))

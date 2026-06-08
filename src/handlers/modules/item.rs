@@ -114,7 +114,7 @@ pub async fn update_item_list_handler(
         .map_err(|_| AppError::BadRequest("Invalid item id format".into()))?;
 
     let updated = update_item_list(&state.db_pool, module_id, &add, &remove).await?;
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(
@@ -160,7 +160,7 @@ pub async fn assign_item_handler(
     assign_item(&state.db_pool, item_id, user_id, payload.assign).await?;
 
     let updated = get_item_list(&state.db_pool, module_id).await?.ok_or(AppError::NotFound("Item list not found".into()))?;
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 #[utoipa::path(

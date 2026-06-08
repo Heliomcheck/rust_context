@@ -65,7 +65,7 @@ pub async fn create_task_list_handler(
     security(("bearerAuth" = [])),
     request_body = UpdateTaskListRequest,
     responses(
-        (status = 200, description = "Task list updated", body = TaskListWithItems),
+        (status = 200, description = "Task list updated", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -106,7 +106,7 @@ pub async fn update_task_list_handler(
         .map_err(|_| AppError::BadRequest("Invalid task id format".into()))?;
 
     let updated = update_task_list(&state.db_pool, module_id, &add, &remove).await?;
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 // ====================== 3. Назначение/снятие ответственного за задачу ======================
@@ -117,7 +117,7 @@ pub async fn update_task_list_handler(
     security(("bearerAuth" = [])),
     request_body = AssignTaskRequest,
     responses(
-        (status = 200, description = "Task assigned/unassigned", body = TaskListWithItems),
+        (status = 200, description = "Task assigned/unassigned", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -162,7 +162,7 @@ pub async fn assign_task_handler(
         .await?
         .ok_or(AppError::NotFound("Task list not found".to_string()))?;
     
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 // ====================== 4. Отметка о выполнении задачи ======================
@@ -173,7 +173,7 @@ pub async fn assign_task_handler(
     security(("bearerAuth" = [])),
     request_body = CompleteTaskRequest,
     responses(
-        (status = 200, description = "Task completion toggled", body = TaskListWithItems),
+        (status = 200, description = "Task completion toggled", body = SuccessResponse),
         (status = 400, description = "Bad request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
@@ -207,7 +207,7 @@ pub async fn complete_task_handler(
     complete_task(&state.db_pool, task_id, user.user_id, payload.completed).await?;
 
     let updated = get_task_list(&state.db_pool, module_id).await?.ok_or(AppError::NotFound("Task list not found".into()))?;
-    Ok((StatusCode::OK, Json(updated)))
+    Ok((StatusCode::OK, Json(SuccessResponse { success: true })))
 }
 
 // ====================== 5. Удаление списка задач ======================
@@ -323,7 +323,7 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))?;
         let resp = app.oneshot(req).await?;
-        assert_eq!(resp.status(), StatusCode::CREATED);
+        assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
     }
 
